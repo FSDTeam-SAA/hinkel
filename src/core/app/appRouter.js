@@ -8,7 +8,7 @@ import orderRoutes from '../../entities/order/order.routes.js'
 import contentRoutes  from '../../entities/admin/content/content.routes.js'
 
 import guestRouter from '../../entities/newsletter/guest.router.js'
-
+import contactRouter from '../../entities/contact/contact.router.js'
 const router = express.Router();
 
 
@@ -21,7 +21,8 @@ router.use('/v1/order',orderRoutes)
 router.use('/v1/content',contentRoutes)
 
 router.use('/v1/order',orderRoutes);
-router.use('/v1/guest',guestRouter)
+router.use('/v1/guest',guestRouter);
+router.use('/v1/contact', contactRouter)
 
 
 
