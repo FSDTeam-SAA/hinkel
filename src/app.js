@@ -16,6 +16,7 @@ import errorHandler from './core/middlewares/errorMiddleware.js';
 import notFound from './core/middlewares/notFound.js';
 import { globalLimiter } from './lib/limit.js';
 import appRouter from './core/app/appRouter.js';
+import { globalErrorHandler } from './core/middlewares/globalErrorHandler.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -58,7 +59,7 @@ app.use('/api', appRouter);
 app.use(notFound);
 
 // Set up error handling middleware
-app.use(errorHandler);
+app.use(globalErrorHandler);
 
 logger.info('Middleware stack initialized');
 
