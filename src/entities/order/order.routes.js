@@ -1,5 +1,6 @@
 import express from 'express';
-import { calculatePrice, confirmPayment, getAllOrdersPopulated, getOrdersByUserId, getOrderStats, updateDeliveryStatus } from './order.controller.js';
+import { calculatePrice, confirmPayment, getAllOrdersPopulated, getOrdersByUserId, getOrderStats, updateDeliveryStatus, uploadBook } from './order.controller.js';
+import { multerUpload } from '../../core/middlewares/multer.js';
 
 const router = express.Router();
 
@@ -10,6 +11,6 @@ router.patch('/update-delivery-status', updateDeliveryStatus);
 router.post('/confirm-payment', confirmPayment);
 router.get('/user/:userId', getOrdersByUserId);
 router.get('/admin/all-orders', getAllOrdersPopulated);
-
+router.put('/upload-book', multerUpload([{name:"image"}]),uploadBook);
 router.get('/admin/dashboard-stats', getOrderStats);
 export default router;

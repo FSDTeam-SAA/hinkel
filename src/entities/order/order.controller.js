@@ -3,6 +3,8 @@ import Stripe from 'stripe';
 import Pricing from '../admin/pricing.model.js';
 import Order from './order.model.js';
 import User from '../auth/auth.model.js';
+import { generateResponse } from '../../lib/responseFormate.js';
+import { cloudinaryUpload } from '../../lib/cloudinaryUpload.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -196,6 +198,79 @@ export const getOrdersByUserId = async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: error.message 
+    });
+  }
+};
+
+
+import fs from "fs";
+
+/**
+ * Upload book image and update the corresponding order
+ */
+export const uploadBook = async (req, res) => {
+  try {
+    const { title, orderId ,approvalStatus} = req.body;
+
+    if (!orderId || !title) {
+      return res.status(400).json({
+        success: false,
+        message: "orderId and title are required"
+      });
+    }
+
+    // 1️⃣ Check if file exists
+    const file = req.files?.image?.[0];
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        message: "Book image is required"
+      });
+    }
+
+    // 2️⃣ Upload image to Cloudinary
+    const sanitizedTitle = `${title.replace(/\s+/g, "-")}-${Date.now()}`;
+    const uploaded = await cloudinaryUpload(file.path, sanitizedTitle, "items");
+
+    // 3️⃣ Remove temp file
+    if (file.path && fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path);
+    }
+
+    if (!uploaded?.secure_url) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to upload book image"
+      });
+    }
+
+    // 4️⃣ Update Order document with book URL
+    const updatedOrder = await Order.findByIdAndUpdate(
+      orderId,
+     
+      { book: uploaded.secure_url ,title,approvalStatus},
+      { new: true } // return the updated document
+    );
+
+    if (!updatedOrder) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
+    }
+
+    // 5️⃣ Send success response
+    return res.status(200).json({
+      success: true,
+      message: "Book uploaded and order updated successfully",
+      order: updatedOrder
+    });
+
+  } catch (error) {
+    console.error("Upload Book Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to upload book"
     });
   }
 };

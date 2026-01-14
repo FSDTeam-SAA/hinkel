@@ -6,11 +6,14 @@ const orderSchema = new mongoose.Schema({
     ref: 'User', // MUST match the name in mongoose.model('User', ...)
     required: true 
   },
+  title:{type:String},
+  book:{type:String},
   deliveryType: {
     type: String,
     enum: ['digital', 'print', 'print&digital'],
     required: true
   },
+  approvalStatus:{type:String},
   pageCount: { type: Number, required: true },
   totalAmount: { type: Number, required: true }, // Stored in cents for Stripe
   status: {
