@@ -26,13 +26,29 @@ const app = express();
 
 // Set up security middleware
 app.use(helmet());
-app.use(
-  cors({
-    origin: '*',
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
-  })
-);
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://sktch-labs.vercel.app",
+];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // allow requests with no origin (Postman, curl, server-to-server)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions)); // important for preflight
 app.use(xssClean());
 app.use(mongoSanitize());
 
