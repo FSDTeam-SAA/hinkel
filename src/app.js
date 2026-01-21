@@ -27,8 +27,10 @@ const app = express();
 // Set up security middleware
 app.use(helmet());
 const allowedOrigins = [
-  "http://localhost:3000",
-  "https://sktch-labs.vercel.app",
+  'http://localhost:3000',
+  'http://localhost:5173', // Vite default port
+  'http://localhost:8080', // Common dev port
+  'https://sktch-labs.vercel.app'
 ];
 
 const corsOptions = {
@@ -40,15 +42,17 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    return callback(new Error(`CORS blocked for origin: ${origin}`));
+    // Instead of throwing an error, deny the request gracefully
+    logger.warn(`CORS blocked for origin: ${origin}`);
+    return callback(null, false);
   },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 };
 
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions)); // important for preflight
+app.options('*', cors(corsOptions)); // important for preflight
 app.use(xssClean());
 app.use(mongoSanitize());
 
