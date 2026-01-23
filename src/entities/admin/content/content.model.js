@@ -5,7 +5,8 @@ const ItemSchema = new mongoose.Schema(
     title: { type: String, required: true },
     subtitle: { type: String },
     type: { type: String, required: true },
-    image: { type: String }, 
+    image: { type: String },
+    prompt: { type: String }
   },
   { timestamps: true }
 );

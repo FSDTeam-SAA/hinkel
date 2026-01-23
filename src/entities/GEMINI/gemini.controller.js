@@ -1,14 +1,12 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import 'dotenv/config';
 
-
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export const generateLineArtPreview = async (req, res) => {
   try {
-    const { image, type } = req.body;
-    if(!type)
-      return res.status(400).json({ error: 'No type provided'})
+    const { image, type, prompt: customPrompt } = req.body;
+    if (!type) return res.status(400).json({ error: 'No type provided' });
     if (!image)
       return res.status(400).json({ error: 'No image data provided' });
 
@@ -22,10 +20,13 @@ export const generateLineArtPreview = async (req, res) => {
         'Convert this image into a simple black and white line art drawing. Fine lines, medium detail, but still clean black and white, NO shading.'
     };
 
-    // Default to 'kids' if type is not provided or invalid
-    const selectedType =
-      type && promptMap[type.toLowerCase()] ? type.toLowerCase() : 'kids';
-    const prompt = promptMap[selectedType];
+    // Use custom prompt if provided, otherwise use default based on type
+    let prompt = customPrompt;
+    if (!customPrompt) {
+      const selectedType =
+        type && promptMap[type.toLowerCase()] ? type.toLowerCase() : 'kids';
+      prompt = promptMap[selectedType];
+    }
 
     const model = genAI.getGenerativeModel({
       model: 'gemini-3-pro-image-preview'
