@@ -12,7 +12,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import logger from './core/config/logger.js';
-import errorHandler from './core/middlewares/errorMiddleware.js';
+// import errorHandler from './core/middlewares/errorMiddleware.js';
 import notFound from './core/middlewares/notFound.js';
 import { globalLimiter } from './lib/limit.js';
 import appRouter from './core/app/appRouter.js';
