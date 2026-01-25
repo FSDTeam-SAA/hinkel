@@ -1,27 +1,9 @@
 import { PrivacyPolicy } from "./privacy.model.js";
 
-// Basic “text-only” guard (reject HTML tags)
-function assertPlainText(input, fieldName = "content") {
-  if (typeof input !== "string") {
-    const err = new Error(`${fieldName} must be a string`);
-    err.statusCode = 400;
-    throw err;
-  }
-  // Reject any HTML-like tags
-  if (/<\/?[a-z][\s\S]*>/i.test(input)) {
-    const err = new Error(`${fieldName} must be plain text (HTML is not allowed)`);
-    err.statusCode = 400;
-    throw err;
-  }
-}
-
 export async function upsertPrivacyPolicy(payload, userId) {
-  if (payload.title != null) assertPlainText(payload.title, "title");
-  if (payload.content != null) assertPlainText(payload.content, "content");
-
   const update = {
-    ...(payload.title != null ? { title: payload.title.trim() } : {}),
-    ...(payload.content != null ? { content: payload.content.trim() } : {}),
+    ...(payload.title != null ? { title: String(payload.title).trim() } : {}),
+    ...(payload.content != null ? { content: String(payload.content).trim() } : {}),
     ...(payload.status != null ? { status: payload.status } : {}),
     updatedBy: userId,
   };
