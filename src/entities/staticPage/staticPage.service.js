@@ -23,12 +23,12 @@ export const saveAboutUs = async (payload, userId) => {
 // Public/Admin: Fetches the one and only document
 export const getAboutUs = async () => {
   const data = await StaticPage.findOne({}).lean();
-  
+
   if (!data) {
     const err = new Error('About Us content has not been created yet.');
     err.statusCode = 404;
     throw err;
   }
-  
+
   return data;
 };
