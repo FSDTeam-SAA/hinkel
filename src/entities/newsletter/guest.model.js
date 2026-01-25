@@ -1,6 +1,4 @@
-
 import { Schema, model } from 'mongoose';
-
 
 export const guestSchema = new Schema({
     email:{
