@@ -1,55 +1,41 @@
-import {
-    upsertStaticPage,
-    getStaticPageAdmin,
-    getStaticPagePublic,
-} from "./staticPage.service.js";
+import { saveAboutUs, getAboutUs } from "./staticPage.service.js";
 
-export async function upsertStaticPageHandler(req, res, next) {
-    try {
-        const { key } = req.params;
-        const userId = req.user?._id;
+// POST: Admin saves/updates the content
+export const saveAboutUsHandler = async (req, res, next) => {
+  try {
+    const userId = req.user?._id;
+    const data = await saveAboutUs(req.body, userId);
 
-        const data = await upsertStaticPage(key, req.body, userId);
+    res.status(200).json({
+      success: true,
+      statusCode: 200,
+      message: "About Us content published successfully",
+      data
+    });
+  } catch (err) {
+    next(err);
+  }
+};
 
-        return res.status(200).json({
-            success: true,
-            statusCode: 200,
-            message: "Page saved",
-            data,
+// GET: Everyone (Public or Admin) gets the same content
+export const getAboutUsHandler = async (req, res, next) => {
+  try {
+    const data = await getAboutUs();
+
+    res.status(200).json({
+      success: true,
+      statusCode: 200,
+      data
+    });
+  } catch (err) {
+    // This will catch the 404 from the service if the doc doesn't exist
+    if (err.statusCode) {
+        return res.status(err.statusCode).json({
+            success: false,
+            statusCode: err.statusCode,
+            message: err.message
         });
-    } catch (err) {
-        next(err);
     }
-}
-
-export async function getStaticPageAdminHandler(req, res, next) {
-    try {
-        const { key } = req.params;
-        const data = await getStaticPageAdmin(key);
-
-        return res.status(200).json({
-            success: true,
-            statusCode: 200,
-            message: "Page fetched",
-            data,
-        });
-    } catch (err) {
-        next(err);
-    }
-}
-
-export async function getStaticPagePublicHandler(req, res, next) {
-    try {
-        const { key } = req.params;
-        const data = await getStaticPagePublic(key);
-
-        return res.status(200).json({
-            success: true,
-            statusCode: 200,
-            message: "Page fetched",
-            data,
-        });
-    } catch (err) {
-        next(err);
-    }
-}
+    next(err);
+  }
+};

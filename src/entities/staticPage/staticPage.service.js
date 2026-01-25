@@ -1,45 +1,34 @@
 import { StaticPage } from './staticPage.model.js';
 
-export async function upsertStaticPage(key, payload, userId) {
-  const normKey = String(key).trim().toLowerCase();
-
-  const update = {
-    ...(payload.title != null ? { title: payload.title.trim() } : {}),
-    ...(payload.content != null ? { content: payload.content.trim() } : {}),
-    ...(payload.status != null ? { status: payload.status } : {}),
-    updatedBy: userId
-  };
-
-  if (payload.status === 'published') update.publishedAt = new Date();
-
-  return StaticPage.findOneAndUpdate(
-    { key: normKey },
-    { $set: update, $setOnInsert: { key: normKey, createdBy: userId } },
-    { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
+// Admin: Saves or Creates the one and only document
+export const saveAboutUs = async (payload, userId) => {
+  return await StaticPage.findOneAndUpdate(
+    {}, // Empty filter targets the singleton document
+    {
+      $set: {
+        title: payload.title,
+        content: payload.content,
+        updatedBy: userId
+      }
+    },
+    {
+      new: true,
+      upsert: true,
+      runValidators: true,
+      setDefaultsOnInsert: true
+    }
   );
-}
+};
 
-export async function getStaticPageAdmin(key) {
-  const normKey = String(key).trim().toLowerCase();
-  const doc = await StaticPage.findOne({ key: normKey }).lean();
-  if (!doc) {
-    const err = new Error('Page not found');
+// Public/Admin: Fetches the one and only document
+export const getAboutUs = async () => {
+  const data = await StaticPage.findOne({}).lean();
+  
+  if (!data) {
+    const err = new Error('About Us content has not been created yet.');
     err.statusCode = 404;
     throw err;
   }
-  return doc;
-}
-
-export async function getStaticPagePublic(key) {
-  const normKey = String(key).trim().toLowerCase();
-  const doc = await StaticPage.findOne({
-    key: normKey,
-    status: 'published'
-  }).lean();
-  if (!doc) {
-    const err = new Error('Page not found');
-    err.statusCode = 404;
-    throw err;
-  }
-  return doc;
-}
+  
+  return data;
+};

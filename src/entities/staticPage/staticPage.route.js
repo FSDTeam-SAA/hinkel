@@ -1,7 +1,9 @@
 import { Router } from "express";
-import { getStaticPagePublicHandler } from "./staticPage.controller.js";
+import { getAboutUsHandler } from "./staticPage.controller.js";
 
 const router = Router();
-router.get("/:key", getStaticPagePublicHandler);
+
+// Anyone can view the published version
+router.get("/", getAboutUsHandler);
 
 export default router;
