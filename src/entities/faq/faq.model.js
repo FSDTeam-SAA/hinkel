@@ -49,8 +49,10 @@ const FaqSectionSchema = new mongoose.Schema(
         title: { type: String, required: true, trim: true, default: "Frequently asked questions" },
         subtitle: { type: String, trim: true },
 
-        items: { type: [FaqItemSchema], default: [] },
-        cta: { type: FaqCtaSchema, default: () => ({ enabled: true }) },
+        // Changed: Items can be empty or null
+        items: { type: [FaqItemSchema], default: [], required: false },
+        // Changed: CTA no longer defaults to an object, can be optional
+        cta: { type: FaqCtaSchema, required: false },
 
         // Admin lifecycle
         status: {
