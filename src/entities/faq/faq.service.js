@@ -47,8 +47,10 @@ export async function upsertFaqSection(key, payload, userId) {
         title: payload.title,
         subtitle: payload.subtitle,
         status: payload.status,
-        cta: sanitizeCta(payload.cta),
-        items: normalizeItems(payload.items),
+        // Safety check: Only sanitize if CTA exists
+        cta: payload.cta ? sanitizeCta(payload.cta) : undefined,
+        // Safety check: Only normalize if items exist
+        items: payload.items ? normalizeItems(payload.items) : [],
         updatedBy: userId,
     };
 
@@ -84,22 +86,19 @@ export async function getFaqSectionAdmin(key) {
 
 export async function getFaqSectionPublic(key) {
     const doc = await FaqSection.findOne({ key, status: "published" }).lean();
-    if (!doc) {
-        const err = new Error("FAQ not found");
-        err.statusCode = 404;
-        throw err;
+    if (!doc) throw new Error(404, "FAQ not found");
+
+    // Safety check for items
+    if (doc.items && doc.items.length > 0) {
+        doc.items = doc.items
+            .filter((i) => i.isActive)
+            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+            .map((i) => ({
+                ...i,
+                answer: { sanitized: i.answer?.sanitized, format: i.answer?.format },
+            }));
     }
-
-    // only active items for public
-    doc.items = (doc.items || [])
-        .filter((i) => i.isActive)
-        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-
-    // Optional: only return sanitized for public
-    doc.items = doc.items.map((i) => ({
-        ...i,
-        answer: { sanitized: i.answer?.sanitized, format: i.answer?.format },
-    }));
 
     return doc;
 }
+
