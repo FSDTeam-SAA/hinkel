@@ -6,6 +6,6 @@ const router = Router();
 
 // Only Admins can Post or View Drafts here
 router.post("/", verifyToken, adminMiddleware, saveAboutUsHandler);
-router.get("/", verifyToken, adminMiddleware, getAboutUsHandler);
+router.get("/",  getAboutUsHandler);
 
 export default router;
