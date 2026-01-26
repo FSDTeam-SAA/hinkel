@@ -8,6 +8,31 @@ import { orderService } from './order.service.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+// Helper function to calculate total price based on page tiers
+const calculateTotalPrice = (pageCount, pageTiers) => {
+  if (!pageTiers || pageTiers.length === 0) {
+    return 0;
+  }
+
+  // Find the appropriate tier based on pageCount
+  // Tiers are sorted by pageLimit in ascending order
+  let totalPrice = 0;
+
+  for (const tier of pageTiers) {
+    if (pageCount <= tier.pageLimit) {
+      totalPrice = tier.price;
+      break;
+    }
+  }
+
+  // If pageCount exceeds all tiers, use the last (highest) tier price
+  if (totalPrice === 0 && pageTiers.length > 0) {
+    totalPrice = pageTiers[pageTiers.length - 1].price;
+  }
+
+  return totalPrice;
+};
+
 // API 1: Calculate Price for Frontend Preview
 export const calculatePrice = async (req, res) => {
   try {
@@ -22,13 +47,13 @@ export const calculatePrice = async (req, res) => {
         .json({ success: false, message: 'Pricing configuration not found' });
     }
 
-    const totalPrice = pageCount * pricingConfig.pricePerPage;
+    const totalPrice = calculateTotalPrice(pageCount, pricingConfig.pageTiers);
 
     res.status(200).json({
       success: true,
       data: {
         pageCount,
-        pricePerPage: pricingConfig.pricePerPage,
+        pageTiers: pricingConfig.pageTiers,
         totalPrice: totalPrice.toFixed(2),
         currency: pricingConfig.currency
       }
@@ -51,9 +76,8 @@ export const confirmPayment = async (req, res) => {
         .json({ success: false, message: 'Invalid delivery type' });
     }
 
-    const amountInCents = Math.round(
-      pageCount * pricingConfig.pricePerPage * 100
-    );
+    const totalPrice = calculateTotalPrice(pageCount, pricingConfig.pageTiers);
+    const amountInCents = Math.round(totalPrice * 100);
 
     let finalPageCount = pageCount;
     let finalAmount = amountInCents;
