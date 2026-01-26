@@ -9,7 +9,7 @@ import {
 import { verifyToken, adminMiddleware } from "../../core/middlewares/authMiddleware.js";
 
 const router = Router();
-router.use(verifyToken, adminMiddleware);
+// router.use(verifyToken, adminMiddleware);
 // router.use(protect, requireAdmin);
 
 router.get("/", getPrivacyPolicyAdminHandler);
