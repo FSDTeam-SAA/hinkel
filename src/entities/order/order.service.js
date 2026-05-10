@@ -55,7 +55,11 @@ export const markOrderAsPaid = async (orderId) => {
   const user = await User.findById(order.userId);
 
   if (user) {
+    // Update user's subscription status to true
+    await User.findByIdAndUpdate(order.userId, { hasActiveSubscription: true });
+
     // Send payment confirmation emails (non-blocking)
+
     notifyUserPaymentConfirmed(order, user).catch((err) => {
       console.error('User payment confirmation email failed:', err);
     });

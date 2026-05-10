@@ -53,10 +53,13 @@ export const checkPendingPaymentsJob = async () => {
             { new: true }
           );
 
-          // Fetch user for email notifications
+          // Fetch user and update subscription status
           const user = await User.findById(order.userId);
 
           if (user) {
+            // Update user's subscription status to true
+            await User.findByIdAndUpdate(order.userId, { hasActiveSubscription: true });
+
             // Send payment confirmation emails (non-blocking)
             notifyUserPaymentConfirmed(updatedOrder, user).catch((err) => {
               console.error(

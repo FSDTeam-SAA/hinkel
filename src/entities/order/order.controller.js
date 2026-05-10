@@ -503,7 +503,11 @@ export const checkPaymentStatus = async (req, res) => {
       if (order) {
         const user = await User.findById(order.userId);
         if (user) {
+          // Update user's subscription status to true
+          await User.findByIdAndUpdate(order.userId, { hasActiveSubscription: true });
+
           // Send payment confirmation emails (non-blocking)
+
           const { notifyUserPaymentConfirmed, notifyAdminPaymentConfirmed } =
             await import('./orderNotification.service.js');
           notifyUserPaymentConfirmed(order, user).catch((err) => {
