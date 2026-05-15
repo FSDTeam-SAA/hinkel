@@ -181,7 +181,7 @@ export const getBookUploadedUserTemplate = (orderData, userData) => {
   
   let headerText = 'Your Book is Ready!';
   let mainMessage = 'Great news! Your custom coloring book has been finalized and is ready for you.';
-  let subMessage = 'You can access your book anytime using the link below.';
+  let subMessage = 'We will follow up with any next steps you need.';
   let icon = '📚';
 
   if (deliveryType === 'print') {
@@ -191,13 +191,13 @@ export const getBookUploadedUserTemplate = (orderData, userData) => {
     icon = '📦';
   } else if (deliveryType === 'print&digital') {
     headerText = 'Print Order Confirmed & Digital Book Ready!';
-    mainMessage = 'Your physical book is being prepared for printing, and your digital copy is ready right now!';
-    subMessage = 'Your digital PDF is attached to this email and also available for download via the link below. We will notify you when your physical copy ships.';
+    mainMessage = 'Your physical book is being prepared for printing, and your digital copy is attached to this email.';
+    subMessage = 'We will notify you when your physical copy ships.';
     icon = '✨';
   } else if (deliveryType === 'digital') {
     headerText = 'Digital Book Delivered!';
-    mainMessage = 'Your custom digital coloring book is ready for download.';
-    subMessage = 'We have attached your PDF coloring book to this email for your convenience. You can also download it using the button below.';
+    mainMessage = 'Your custom digital coloring book is attached to this email.';
+    subMessage = 'Please keep this email for future reference.';
     icon = '📥';
   }
 
@@ -219,18 +219,6 @@ export const getBookUploadedUserTemplate = (orderData, userData) => {
         <p style="margin: 10px 0;"><strong>Delivery Type:</strong> ${orderData.deliveryType.replace('&', ' & ')}</p>
         <p style="margin: 10px 0;"><strong>Page Count:</strong> ${orderData.pageCount} pages</p>
       </div>
-      
-      ${
-        orderData.book
-          ? `
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${orderData.book}" style="display: inline-block; padding: 14px 28px; background-color: #ff8b36; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 6px rgba(255, 139, 54, 0.2);">
-          📥 Download Your Coloring Book
-        </a>
-      </div>
-      `
-          : ''
-      }
       
       <p style="font-size: 15px; line-height: 1.5; color: #555;">${subMessage}</p>
       
@@ -292,18 +280,6 @@ export const getDeliveryStatusUpdateUserTemplate = (
         <p><strong>Delivery Type:</strong> ${orderData.deliveryType}</p>
         <p><strong>Page Count:</strong> ${orderData.pageCount} pages</p>
       </div>
-      
-      ${
-        orderData.book
-          ? `
-      <div style="text-align: center; margin: 20px 0;">
-        <a href="${orderData.book}" style="display: inline-block; padding: 12px 24px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
-          📥 Access Your Book
-        </a>
-      </div>
-      `
-          : ''
-      }
       
       <p style="margin-top: 30px; color: #666; font-size: 14px;">
         <strong>Updated:</strong> ${new Date().toLocaleString()}

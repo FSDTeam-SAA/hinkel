@@ -15,16 +15,25 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
  * Sanitize an order object to remove the direct Cloudinary book URL.
  * Replaces it with a hasBook flag and a secure proxy URL.
  */
-const sanitizeOrderForResponse = (order) => {
+const hasDigitalDelivery = (deliveryType) =>
+  deliveryType === 'digital' || deliveryType === 'print&digital';
+
+const sanitizeOrderForResponse = (
+  order,
+  { allowCustomerBookAccess = true } = {}
+) => {
   const obj = order.toObject ? order.toObject() : { ...order };
   const hasBook = !!obj.book;
+  const canExposeBookAccess =
+    allowCustomerBookAccess || !hasDigitalDelivery(obj.deliveryType);
 
   // Replace the raw Cloudinary URL with safe alternatives
-  obj.hasBook = hasBook;
-  obj.bookViewUrl = hasBook ? `/order/${obj._id}/view-pdf` : null;
+  obj.hasBook = canExposeBookAccess ? hasBook : false;
+  obj.bookViewUrl =
+    canExposeBookAccess && hasBook ? `/order/${obj._id}/view-pdf` : null;
   // Keep book field for cover image display (Cloudinary can render PDF thumbnails)
   // but mark it as thumbnail-only
-  obj.bookThumbnail = obj.book || null;
+  obj.bookThumbnail = canExposeBookAccess ? obj.book || null : null;
   delete obj.book;
 
   return obj;
@@ -415,7 +424,9 @@ export const getAllOrdersPopulated = async (req, res) => {
     const totalOrders = await Order.countDocuments(query);
 
     // Sanitize orders to remove direct Cloudinary book URLs
-    const sanitizedOrders = orders.map(sanitizeOrderForResponse);
+    const sanitizedOrders = orders.map((order) =>
+      sanitizeOrderForResponse(order, { allowCustomerBookAccess: true })
+    );
 
     res.status(200).json({
       success: true,
@@ -441,7 +452,9 @@ export const getOrdersByUserId = async (req, res) => {
     const userOrders = await Order.find({ userId }).sort({ createdAt: -1 }); // Newest orders at the top
 
     // Sanitize orders to remove direct Cloudinary book URLs
-    const sanitizedOrders = userOrders.map(sanitizeOrderForResponse);
+    const sanitizedOrders = userOrders.map((order) =>
+      sanitizeOrderForResponse(order, { allowCustomerBookAccess: false })
+    );
 
     res.status(200).json({
       success: true,

@@ -33,9 +33,21 @@ export const viewBookPdf = async (req, res) => {
     // Authorization check: admin can see all, user can only see their own
     const isAdmin = user.role === 'ADMIN';
     const isOwner = order.userId.toString() === user._id.toString();
+    const isDigitalDelivery =
+      order.deliveryType === 'digital' || order.deliveryType === 'print&digital';
 
     if (!isAdmin && !isOwner) {
       return generateResponse(res, 403, false, 'You are not authorized to view this book', null);
+    }
+
+    if (!isAdmin && isDigitalDelivery) {
+      return generateResponse(
+        res,
+        403,
+        false,
+        'Digital books are delivered by email only',
+        null
+      );
     }
 
     // Check if book exists
