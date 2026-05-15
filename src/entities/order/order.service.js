@@ -6,7 +6,8 @@ import {
   notifyAdminOrderCreated,
   notifyUserPaymentConfirmed,
   notifyAdminPaymentConfirmed,
-  notifyUserBookUploaded,
+  notifyUserBookPendingReview,
+  notifyUserBookApproved,
   notifyUserDeliveryStatusUpdate,
   notifyUserRefund,
   notifyAdminRefund
@@ -195,7 +196,7 @@ export const settleCheckoutSession = async (session, orderIdOverride = null) => 
 };
 
 /**
- * Update order with book upload and send notification
+ * Update order with book upload and notify user that review is pending
  */
 export const updateOrderWithBook = async (orderId, bookData) => {
   let order;
@@ -219,9 +220,9 @@ export const updateOrderWithBook = async (orderId, bookData) => {
   const user = await User.findById(order.userId);
 
   if (user) {
-    // Send book uploaded notification (non-blocking)
-    notifyUserBookUploaded(order, user).catch((err) => {
-      console.error('User book uploaded email failed:', err);
+    // Send pending review notification (non-blocking)
+    notifyUserBookPendingReview(order, user).catch((err) => {
+      console.error('User pending review email failed:', err);
     });
   }
 
@@ -247,10 +248,10 @@ export const updateOrderDeliveryStatus = async (
   }
 
   const oldDeliveryStatus = currentOrder.deliveryStatus;
-  const oldApprovalStatus = currentOrder.approvalStatus;
 
   // Check if this is a rejection (deliveryStatus = "rejected")
   const isRejection = newDeliveryStatus === 'rejected';
+  const isApproval = newDeliveryStatus === 'approved';
 
   // Build update object with only provided fields
   const updateData = {};
@@ -329,7 +330,21 @@ export const updateOrderDeliveryStatus = async (
     }
   }
 
+  if (isRejection && user) {
+    notifyUserRefund(order, user).catch((err) => {
+      console.error('User rejection email failed:', err);
+    });
+    return order;
+  }
+
   // ==================== SEND NOTIFICATION FOR STATUS CHANGE ====================
+  if (user && oldDeliveryStatus !== newDeliveryStatus && isApproval) {
+    notifyUserBookApproved(order, user).catch((err) => {
+      console.error('User book approval email failed:', err);
+    });
+    return order;
+  }
+
   // Send notification if delivery status changed (and not a rejection, as rejection sends refund emails)
   if (user && oldDeliveryStatus !== newDeliveryStatus && !isRejection) {
     // Send delivery status update notification (non-blocking)

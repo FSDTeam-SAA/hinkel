@@ -174,9 +174,47 @@ export const getPaymentConfirmedAdminTemplate = (orderData, userData) => {
 };
 
 /**
- * Email template for user when book is uploaded
+ * Email template for user when the finalized book is created and waiting for admin review
  */
-export const getBookUploadedUserTemplate = (orderData, userData) => {
+export const getBookPendingReviewUserTemplate = (orderData, userData) => {
+  return `
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px; color: #333;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <div style="font-size: 40px; margin-bottom: 10px;">🕒</div>
+        <h2 style="color: #ff8b36; margin: 0;">Your Book Was Created Successfully</h2>
+      </div>
+
+      <p>Hi <strong>${userData.firstName || userData.name || 'Customer'}</strong>,</p>
+
+      <p>Your custom coloring book has been successfully created and is now waiting for admin verification.</p>
+
+      <div style="background-color: #fffaf3; padding: 20px; border-radius: 10px; margin: 20px 0; border: 1px solid #ffe8d6;">
+        <h3 style="margin-top: 0; color: #ff8b36; border-bottom: 1px solid #ffe8d6; padding-bottom: 10px;">Book Details</h3>
+        <p style="margin: 10px 0;"><strong>Title:</strong> ${orderData.title}</p>
+        <p style="margin: 10px 0;"><strong>Order ID:</strong> <span style="font-family: monospace;">${orderData._id}</span></p>
+        <p style="margin: 10px 0;"><strong>Delivery Type:</strong> ${orderData.deliveryType.replace('&', ' & ')}</p>
+        <p style="margin: 10px 0;"><strong>Page Count:</strong> ${orderData.pageCount} pages</p>
+        <p style="margin: 10px 0;"><strong>Review Status:</strong> <span style="color: #ff8b36; font-weight: bold; text-transform: capitalize;">${orderData.deliveryStatus || 'pending'}</span></p>
+      </div>
+
+      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #ff8b36; margin-bottom: 20px;">
+        <p style="margin: 0; font-size: 14px; color: #555;">
+          <strong>What happens next?</strong> Our team will review your book and email you once it has been approved or if anything needs attention.
+        </p>
+      </div>
+
+      <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #999; font-size: 12px; text-align: center;">
+        <p>Created on ${new Date().toLocaleString()}</p>
+        <p>&copy; ${new Date().getFullYear()} Hinkle Creek. All rights reserved.</p>
+      </div>
+    </div>
+  `;
+};
+
+/**
+ * Email template for user when book is approved
+ */
+export const getBookApprovedUserTemplate = (orderData, userData) => {
   const { deliveryType } = orderData;
   
   let headerText = 'Your Book is Ready!';
@@ -228,6 +266,55 @@ export const getBookUploadedUserTemplate = (orderData, userData) => {
       
       <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #999; font-size: 12px; text-align: center;">
         <p>Delivered on ${new Date().toLocaleString()}</p>
+        <p>&copy; ${new Date().getFullYear()} Hinkle Creek. All rights reserved.</p>
+      </div>
+    </div>
+  `;
+};
+
+/**
+ * Email template for user when book is rejected
+ */
+export const getBookRejectedUserTemplate = (orderData, userData) => {
+  const refundAmount = orderData.refundAmount
+    ? (orderData.refundAmount / 100).toFixed(2)
+    : null;
+
+  return `
+    <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px;">
+      <h2 style="color: #d9534f;">Book Review Update</h2>
+
+      <p>Hi <strong>${userData.firstName || userData.name || 'Customer'}</strong>,</p>
+
+      <p>We’re sorry, but your book could not be approved by our review team.</p>
+
+      <div style="background-color: #fff5f5; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #d9534f;">
+        <h3 style="margin-top: 0; color: #c9302c;">Review Outcome</h3>
+        <p><strong>Order ID:</strong> ${orderData._id}</p>
+        ${orderData.title ? `<p><strong>Book Title:</strong> ${orderData.title}</p>` : ''}
+        <p><strong>Delivery Type:</strong> ${orderData.deliveryType.replace('&', ' & ')}</p>
+        <p><strong>Status:</strong> <span style="color: #d9534f; font-weight: bold; text-transform: capitalize;">${orderData.deliveryStatus || 'rejected'}</span></p>
+        ${
+          orderData.refundReason
+            ? `<p><strong>Reason:</strong> ${orderData.refundReason}</p>`
+            : ''
+        }
+      </div>
+
+      ${
+        refundAmount
+          ? `
+      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+        <p style="margin: 0;"><strong>Refund:</strong> A refund of $${refundAmount} USD has been initiated for this order. Please allow 5-7 business days for the funds to appear in your account.</p>
+      </div>
+      `
+          : ''
+      }
+
+      <p>If you have any questions or would like help creating a revised version, please reply to this email and our team will help you.</p>
+
+      <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #999; font-size: 12px; text-align: center;">
+        <p>Updated on ${new Date().toLocaleString()}</p>
         <p>&copy; ${new Date().getFullYear()} Hinkle Creek. All rights reserved.</p>
       </div>
     </div>

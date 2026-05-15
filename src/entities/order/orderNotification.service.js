@@ -5,9 +5,10 @@ import {
   getOrderCreatedAdminTemplate,
   getPaymentConfirmedUserTemplate,
   getPaymentConfirmedAdminTemplate,
-  getBookUploadedUserTemplate,
+  getBookPendingReviewUserTemplate,
+  getBookApprovedUserTemplate,
+  getBookRejectedUserTemplate,
   getDeliveryStatusUpdateUserTemplate,
-  getRefundUserTemplate,
   getRefundAdminTemplate
 } from './orderEmail.templates.js';
 
@@ -56,9 +57,20 @@ export const notifyAdminPaymentConfirmed = async (orderData, userData) => {
 };
 
 /**
- * Notify user when book is uploaded by admin
+ * Notify user when their finalized book is waiting for admin review
  */
-export const notifyUserBookUploaded = async (orderData, userData) => {
+export const notifyUserBookPendingReview = async (orderData, userData) => {
+  return sendEmail({
+    to: userData.email,
+    subject: '🕒 Book Created - Awaiting Admin Review',
+    html: getBookPendingReviewUserTemplate(orderData, userData)
+  });
+};
+
+/**
+ * Notify user when book is approved by admin
+ */
+export const notifyUserBookApproved = async (orderData, userData) => {
   const { deliveryType, book, title } = orderData;
   let subject = '📚 Your Book is Ready!';
   let attachments = [];
@@ -84,8 +96,19 @@ export const notifyUserBookUploaded = async (orderData, userData) => {
   return sendEmail({
     to: userData.email,
     subject,
-    html: getBookUploadedUserTemplate(orderData, userData),
+    html: getBookApprovedUserTemplate(orderData, userData),
     attachments
+  });
+};
+
+/**
+ * Notify user when book is rejected by admin
+ */
+export const notifyUserBookRejected = async (orderData, userData) => {
+  return sendEmail({
+    to: userData.email,
+    subject: '⚠️ Book Review Update',
+    html: getBookRejectedUserTemplate(orderData, userData)
   });
 };
 
@@ -114,11 +137,7 @@ export const notifyUserDeliveryStatusUpdate = async (
  * Notify user when refund is processed
  */
 export const notifyUserRefund = async (orderData, userData) => {
-  return sendEmail({
-    to: userData.email,
-    subject: '💵 Refund Processed - Order Cancelled',
-    html: getRefundUserTemplate(orderData, userData)
-  });
+  return notifyUserBookRejected(orderData, userData);
 };
 
 /**
