@@ -28,6 +28,10 @@ const orderSchema = new mongoose.Schema(
     },
     stripeSessionId: { type: String },
     stripePaymentIntentId: { type: String },
+    processedCheckoutSessionIds: {
+      type: [String],
+      default: []
+    },
     refundId: { type: String },
     refundStatus: {
       type: String,

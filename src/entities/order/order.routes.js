@@ -1,7 +1,9 @@
 import express from 'express';
 import {
   calculatePrice,
+  calculateAdjustment,
   confirmPayment,
+  confirmAdjustmentPayment,
   getAllOrdersPopulated,
   getOrdersByUserId,
   getOrderStats,
@@ -26,7 +28,9 @@ router.post('/calculate-price', calculatePrice);
 router.patch('/update-delivery-status', updateDeliveryStatus);
 
 // Route for confirming payment and getting the Stripe URL
-router.post('/confirm-payment', confirmPayment);
+router.post('/confirm-payment', verifyToken, confirmPayment);
+router.post('/calculate-adjustment', verifyToken, calculateAdjustment);
+router.post('/confirm-adjustment-payment', verifyToken, confirmAdjustmentPayment);
 
 // Route for checking payment status
 router.post('/check-payment-status', checkPaymentStatus);

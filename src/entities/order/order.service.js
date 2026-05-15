@@ -11,8 +11,45 @@ import {
   notifyUserRefund,
   notifyAdminRefund
 } from './orderNotification.service.js';
+import { getAdjustmentQuote } from './orderPricing.service.js';
+import { couponService } from '../admin/coupon/coupon.service.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+const ADJUSTMENT_CHECKOUT_INTENTS = new Set([
+  'add_pages_checkout',
+  'package_upgrade_checkout'
+]);
+
+const uniqueSessionIds = (sessionIds = [], newSessionId) => {
+  const ids = new Set(sessionIds);
+  if (newSessionId) {
+    ids.add(newSessionId);
+  }
+  return [...ids];
+};
+
+const syncUserPaymentAccess = async (userId) => {
+  await User.findByIdAndUpdate(userId, { hasActiveSubscription: true });
+};
+
+const sendPaymentConfirmedNotifications = async (order) => {
+  const user = await User.findById(order.userId);
+
+  if (!user) {
+    return;
+  }
+
+  await syncUserPaymentAccess(order.userId);
+
+  notifyUserPaymentConfirmed(order, user).catch((err) => {
+    console.error('User payment confirmation email failed:', err);
+  });
+
+  notifyAdminPaymentConfirmed(order, user).catch((err) => {
+    console.error('Admin payment confirmation email failed:', err);
+  });
+};
 
 /**
  * Create a new order and send notifications
@@ -51,25 +88,110 @@ export const markOrderAsPaid = async (orderId) => {
     throw new Error('Order not found');
   }
 
-  // Fetch user data for email
-  const user = await User.findById(order.userId);
-
-  if (user) {
-    // Update user's subscription status to true
-    await User.findByIdAndUpdate(order.userId, { hasActiveSubscription: true });
-
-    // Send payment confirmation emails (non-blocking)
-
-    notifyUserPaymentConfirmed(order, user).catch((err) => {
-      console.error('User payment confirmation email failed:', err);
-    });
-
-    notifyAdminPaymentConfirmed(order, user).catch((err) => {
-      console.error('Admin payment confirmation email failed:', err);
-    });
-  }
+  await sendPaymentConfirmedNotifications(order);
 
   return order;
+};
+
+export const settleCheckoutSession = async (session, orderIdOverride = null) => {
+  if (!session) {
+    throw new Error('Stripe session is required');
+  }
+
+  if (session.payment_status !== 'paid') {
+    return {
+      order: null,
+      settled: false,
+      paymentStatus: session.payment_status
+    };
+  }
+
+  const metadata = session.metadata || {};
+  const checkoutIntent = metadata.checkoutIntent || 'initial_checkout';
+  const orderId = orderIdOverride || metadata.orderId;
+
+  if (!orderId) {
+    throw new Error('Order ID is missing from the checkout session');
+  }
+
+  const currentOrder = await Order.findById(orderId);
+
+  if (!currentOrder) {
+    throw new Error('Order not found');
+  }
+
+  if (currentOrder.processedCheckoutSessionIds?.includes(session.id)) {
+    return {
+      order: currentOrder,
+      settled: true,
+      paymentStatus: session.payment_status
+    };
+  }
+
+  if (ADJUSTMENT_CHECKOUT_INTENTS.has(checkoutIntent)) {
+    const targetDeliveryType = metadata.targetDeliveryType;
+    const targetPageCount = Number(metadata.targetPageCount);
+
+    if (!targetDeliveryType || !Number.isFinite(targetPageCount)) {
+      throw new Error('Adjustment checkout metadata is incomplete');
+    }
+
+    const quote = await getAdjustmentQuote({
+      existingOrder: currentOrder,
+      targetDeliveryType,
+      targetPageCount
+    });
+
+    const updatedOrder = await Order.findByIdAndUpdate(
+      currentOrder._id,
+      {
+        deliveryType: quote.targetDeliveryType,
+        pageCount: quote.targetPageCount,
+        totalAmount: quote.targetTotalCents,
+        stripeSessionId: session.id,
+        stripePaymentIntentId: session.payment_intent,
+        processedCheckoutSessionIds: uniqueSessionIds(
+          currentOrder.processedCheckoutSessionIds,
+          session.id
+        )
+      },
+      { new: true }
+    );
+
+    await syncUserPaymentAccess(updatedOrder.userId);
+
+    return {
+      order: updatedOrder,
+      settled: true,
+      paymentStatus: session.payment_status
+    };
+  }
+
+  const updatedOrder = await Order.findByIdAndUpdate(
+    currentOrder._id,
+    {
+      status: 'paid',
+      stripeSessionId: session.id,
+      stripePaymentIntentId: session.payment_intent,
+      processedCheckoutSessionIds: uniqueSessionIds(
+        currentOrder.processedCheckoutSessionIds,
+        session.id
+      )
+    },
+    { new: true }
+  );
+
+  if (updatedOrder?.appliedCoupon?.code) {
+    await couponService.incrementCouponUsedCount(updatedOrder.appliedCoupon.code);
+  }
+
+  await sendPaymentConfirmedNotifications(updatedOrder);
+
+  return {
+    order: updatedOrder,
+    settled: true,
+    paymentStatus: session.payment_status
+  };
 };
 
 /**
@@ -244,6 +366,7 @@ export const toggleOrderArchive = async (orderId, isActive) => {
 export const orderService = {
   createOrderInDb,
   markOrderAsPaid,
+  settleCheckoutSession,
   updateOrderWithBook,
   updateOrderDeliveryStatus,
   toggleOrderArchive

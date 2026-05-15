@@ -1,11 +1,13 @@
 import Stripe from 'stripe';
-import Pricing from '../admin/pricing.model.js';
 import Order from './order.model.js';
 import User from '../auth/auth.model.js';
 import { cloudinaryUpload } from '../../lib/cloudinaryUpload.js';
 import { orderService } from './order.service.js';
-import { couponService } from '../admin/coupon/coupon.service.js';
 import { frontendUrl } from '../../core/config/config.js';
+import {
+  getAdjustmentQuote,
+  getInitialOrderQuote
+} from './orderPricing.service.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -28,54 +30,50 @@ const sanitizeOrderForResponse = (order) => {
   return obj;
 };
 
-// Helper function to calculate total price based on page tiers
-const calculateTotalPrice = (pageCount, pageTiers) => {
-  if (!pageTiers || pageTiers.length === 0) {
-    return 0;
-  }
-
-  // Find the appropriate tier based on pageCount
-  // Tiers are sorted by pageLimit in ascending order
-  let totalPrice = 0;
-
-  for (const tier of pageTiers) {
-    if (pageCount <= tier.pageLimit) {
-      totalPrice = tier.price;
-      break;
-    }
-  }
-
-  // If pageCount exceeds all tiers, use the last (highest) tier price
-  if (totalPrice === 0 && pageTiers.length > 0) {
-    totalPrice = pageTiers[pageTiers.length - 1].price;
-  }
-
-  return totalPrice;
+const createCheckoutSession = async ({
+  amountInCents,
+  currency,
+  productName,
+  productDescription,
+  metadata
+}) => {
+  return stripe.checkout.sessions.create({
+    payment_method_types: ['card'],
+    line_items: [
+      {
+        price_data: {
+          currency,
+          product_data: {
+            name: productName,
+            description: productDescription
+          },
+          unit_amount: amountInCents
+        },
+        quantity: 1
+      }
+    ],
+    mode: 'payment',
+    success_url: `${frontendUrl}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${frontendUrl}/payment-cancelled`,
+    metadata
+  });
 };
 
 // API 1: Calculate Price for Frontend Preview
 export const calculatePrice = async (req, res) => {
   try {
     const { pageCount, deliveryType } = req.body;
-
-    // Fetch the admin-set price for this specific delivery type
-    const pricingConfig = await Pricing.findOne({ deliveryType });
-
-    if (!pricingConfig) {
-      return res
-        .status(404)
-        .json({ success: false, message: 'Pricing configuration not found' });
-    }
-
-    const totalPrice = calculateTotalPrice(pageCount, pricingConfig.pageTiers);
+    const quote = await getInitialOrderQuote({ deliveryType, pageCount });
 
     res.status(200).json({
       success: true,
       data: {
-        pageCount,
-        pageTiers: pricingConfig.pageTiers,
-        totalPrice: totalPrice.toFixed(2),
-        currency: pricingConfig.currency
+        pageCount: quote.pageCount,
+        deliveryType: quote.deliveryType,
+        pageTiers: quote.pageTiers,
+        totalPrice: quote.totalPrice,
+        totalAmountCents: quote.totalAmountCents,
+        currency: quote.currency
       }
     });
   } catch (error) {
@@ -86,135 +84,174 @@ export const calculatePrice = async (req, res) => {
 // API 2: Confirm Payment & Create Stripe Session
 export const confirmPayment = async (req, res) => {
   try {
-    const { pageCount, deliveryType, userId, orderId, couponCode } = req.body;
+    const { pageCount, deliveryType, userId: requestUserId, couponCode } = req.body;
+    const userId = req.user?._id?.toString?.() || requestUserId;
 
-    // 1. Re-fetch price from DB to ensure security (prevents frontend manipulation)
-    const pricingConfig = await Pricing.findOne({ deliveryType });
-    if (!pricingConfig) {
-      return res
-        .status(404)
-        .json({ success: false, message: 'Invalid delivery type' });
-    }
-
-    const totalPrice = calculateTotalPrice(pageCount, pricingConfig.pageTiers);
-    let amountInCents = Math.round(totalPrice * 100);
-
-    let couponData = null;
-    if (couponCode) {
-      try {
-        const coupon = await couponService.getCouponByCodeFromDb(couponCode);
-        couponData = {
-          code: coupon.codeName,
-          discountAmount: coupon.discountAmount,
-          discountType: coupon.discountType
-        };
-
-        if (coupon.discountType === 'flat') {
-          amountInCents = Math.max(
-            0,
-            amountInCents - coupon.discountAmount * 100
-          );
-        } else if (coupon.discountType === 'percentage') {
-          const discount = Math.round(
-            (amountInCents * coupon.discountAmount) / 100
-          );
-          amountInCents = Math.max(0, amountInCents - discount);
-        }
-      } catch (couponError) {
-        return res.status(400).json({
-          success: false,
-          message: couponError.message || 'Invalid coupon'
-        });
-      }
-    }
-
-    let finalPageCount = pageCount;
-    let finalAmount = amountInCents;
-    let existingOrder = null;
-
-    // Check if orderId is provided - if so, we're adding to an existing order
-    if (orderId) {
-      existingOrder = await Order.findOne({ _id: orderId, userId });
-      if (!existingOrder) {
-        return res
-          .status(404)
-          .json({ success: false, message: 'Order not found for this user' });
-      }
-      // Add new pages to existing order
-      finalPageCount = existingOrder.pageCount + pageCount;
-      finalAmount = existingOrder.totalAmount + amountInCents;
-    }
-
-    // 2. Create the Stripe Checkout Session
-    const sessionItems = [
-      {
-        price_data: {
-          currency: pricingConfig.currency || 'usd',
-          product_data: {
-            name: `Service: ${deliveryType}`,
-            description: orderId
-              ? `Additional payment for ${pageCount} pages (Total: ${finalPageCount} pages)`
-              : `Payment for ${pageCount} total pages`
-          },
-          unit_amount: amountInCents // Charge only for the new pages
-        },
-        quantity: 1
-      }
-    ];
-
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: sessionItems,
-      mode: 'payment',
-      success_url: `${frontendUrl}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${frontendUrl}/payment-cancelled`,
-      metadata: {
-        userId,
-        deliveryType,
-        pageCount,
-        orderId: orderId || '',
-        couponCode: couponCode || ''
-      }
-    });
-
-    let resultOrder;
-
-    if (orderId && existingOrder) {
-      // Update existing order with increased pageCount and totalAmount
-      resultOrder = await Order.findByIdAndUpdate(
-        orderId,
-        {
-          pageCount: finalPageCount,
-          totalAmount: finalAmount,
-          stripeSessionId: session.id,
-          status: 'pending',
-          appliedCoupon: couponData || existingOrder.appliedCoupon
-        },
-        { new: true }
-      );
-    } else {
-      // 3. Save the initial order in the database with email notifications
-      resultOrder = await orderService.createOrderInDb({
-        userId,
-        deliveryType,
-        pageCount,
-        totalAmount: amountInCents,
-        stripeSessionId: session.id,
-        status: 'pending',
-        appliedCoupon: couponData
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authenticated user is required'
       });
     }
 
+    const quote = await getInitialOrderQuote({
+      deliveryType,
+      pageCount,
+      couponCode
+    });
+
+    const resultOrder = await orderService.createOrderInDb({
+      userId,
+      deliveryType,
+      pageCount,
+      totalAmount: quote.totalAmountCents,
+      status: 'pending',
+      appliedCoupon: quote.appliedCoupon
+    });
+
+    let session;
+    try {
+      session = await createCheckoutSession({
+        amountInCents: quote.totalAmountCents,
+        currency: quote.currency,
+        productName: `Service: ${deliveryType}`,
+        productDescription: `Payment for ${pageCount} total pages`,
+        metadata: {
+          checkoutIntent: 'initial_checkout',
+          userId,
+          deliveryType,
+          pageCount: String(pageCount),
+          targetDeliveryType: deliveryType,
+          targetPageCount: String(pageCount),
+          orderId: String(resultOrder._id),
+          couponCode: couponCode || ''
+        }
+      });
+    } catch (sessionError) {
+      await Order.findByIdAndDelete(resultOrder._id);
+      throw sessionError;
+    }
+
+    await Order.findByIdAndUpdate(resultOrder._id, {
+      stripeSessionId: session.id
+    });
+
     res.status(200).json({
       success: true,
-      sessionUrl: session.url, // Use this on frontend to redirect
+      sessionUrl: session.url,
       orderId: resultOrder._id,
-      isUpdate: !!orderId,
       totalPageCount: resultOrder.pageCount,
       totalAmount: resultOrder.totalAmount
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const calculateAdjustment = async (req, res) => {
+  try {
+    const { orderId, targetDeliveryType, targetPageCount } = req.body;
+    const existingOrder = await Order.findById(orderId);
+
+    if (!existingOrder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    if (String(existingOrder.userId) !== String(req.user?._id)) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to adjust this order'
+      });
+    }
+
+    const quote = await getAdjustmentQuote({
+      existingOrder,
+      targetDeliveryType,
+      targetPageCount: Number(targetPageCount)
+    });
+
+    res.status(200).json({
+      success: true,
+      data: quote
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+export const confirmAdjustmentPayment = async (req, res) => {
+  try {
+    const {
+      orderId,
+      targetDeliveryType,
+      targetPageCount,
+      checkoutIntent = 'add_pages_checkout'
+    } = req.body;
+
+    const existingOrder = await Order.findById(orderId);
+
+    if (!existingOrder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    if (String(existingOrder.userId) !== String(req.user?._id)) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to adjust this order'
+      });
+    }
+
+    if (existingOrder.status !== 'paid') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only paid orders can be adjusted'
+      });
+    }
+
+    const quote = await getAdjustmentQuote({
+      existingOrder,
+      targetDeliveryType,
+      targetPageCount: Number(targetPageCount)
+    });
+
+    const session = await createCheckoutSession({
+      amountInCents: quote.deltaCents,
+      currency: quote.currency,
+      productName:
+        checkoutIntent === 'package_upgrade_checkout'
+          ? 'Package upgrade'
+          : 'Additional pages',
+      productDescription:
+        checkoutIntent === 'package_upgrade_checkout'
+          ? `Upgrade ${quote.currentDeliveryType} to ${quote.targetDeliveryType}`
+          : `Increase page count from ${quote.currentPageCount} to ${quote.targetPageCount}`,
+      metadata: {
+        checkoutIntent,
+        orderId: String(existingOrder._id),
+        targetDeliveryType: quote.targetDeliveryType,
+        targetPageCount: String(quote.targetPageCount)
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      sessionUrl: session.url,
+      orderId: existingOrder._id
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
   }
 };
 
@@ -484,40 +521,9 @@ export const checkPaymentStatus = async (req, res) => {
       });
     }
 
-    // If payment is complete, mark order as paid
+    // If payment is complete, settle the order or adjustment idempotently
     if (session.payment_status === 'paid') {
-      // Find and update the order
-      const order = await Order.findByIdAndUpdate(
-        orderId,
-        {
-          status: 'paid',
-          stripePaymentIntentId: session.payment_intent
-        },
-        { new: true }
-      );
-
-      if (order?.appliedCoupon?.code) {
-        await couponService.incrementCouponUsedCount(order.appliedCoupon.code);
-      }
-
-      if (order) {
-        const user = await User.findById(order.userId);
-        if (user) {
-          // Update user's subscription status to true
-          await User.findByIdAndUpdate(order.userId, { hasActiveSubscription: true });
-
-          // Send payment confirmation emails (non-blocking)
-
-          const { notifyUserPaymentConfirmed, notifyAdminPaymentConfirmed } =
-            await import('./orderNotification.service.js');
-          notifyUserPaymentConfirmed(order, user).catch((err) => {
-            console.error('User payment confirmation email failed:', err);
-          });
-          notifyAdminPaymentConfirmed(order, user).catch((err) => {
-            console.error('Admin payment confirmation email failed:', err);
-          });
-        }
-      }
+      const { order } = await orderService.settleCheckoutSession(session, orderId);
 
       return res.status(200).json({
         success: true,

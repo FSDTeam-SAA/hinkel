@@ -1,10 +1,6 @@
 import Stripe from 'stripe';
 import Order from './order.model.js';
-import User from '../auth/auth.model.js';
-import {
-  notifyUserPaymentConfirmed,
-  notifyAdminPaymentConfirmed
-} from './orderNotification.service.js';
+import { orderService } from './order.service.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -39,42 +35,10 @@ export const checkPendingPaymentsJob = async () => {
           order.stripeSessionId
         );
 
-        // If payment is successful, update order to paid
+        // If payment is successful, settle the order idempotently
         if (session.payment_status === 'paid') {
           console.log(`✅ Payment confirmed for order ${order._id}`);
-
-          // Update order with paid status and payment intent ID
-          const updatedOrder = await Order.findByIdAndUpdate(
-            order._id,
-            {
-              status: 'paid',
-              stripePaymentIntentId: session.payment_intent
-            },
-            { new: true }
-          );
-
-          // Fetch user and update subscription status
-          const user = await User.findById(order.userId);
-
-          if (user) {
-            // Update user's subscription status to true
-            await User.findByIdAndUpdate(order.userId, { hasActiveSubscription: true });
-
-            // Send payment confirmation emails (non-blocking)
-            notifyUserPaymentConfirmed(updatedOrder, user).catch((err) => {
-              console.error(
-                `❌ User payment email failed for order ${order._id}:`,
-                err.message
-              );
-            });
-
-            notifyAdminPaymentConfirmed(updatedOrder, user).catch((err) => {
-              console.error(
-                `❌ Admin payment email failed for order ${order._id}:`,
-                err.message
-              );
-            });
-          }
+          await orderService.settleCheckoutSession(session, String(order._id));
         } else if (session.payment_status === 'unpaid') {
           console.log(`⏳ Payment still unpaid for order ${order._id}`);
         }
