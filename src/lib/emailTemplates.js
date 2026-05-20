@@ -12,7 +12,7 @@ const verificationCodeTemplate = (code) => `
         <div style="max-width:600px;margin:0 auto;">
           <div style="text-align:center;padding-bottom:18px;">
             <div style="display:inline-block;background-color:#fff2e6;color:#d96d2d;border-radius:18px;padding:10px 16px;font-size:13px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">
-              Hinkle Account Security
+              Account Security
             </div>
           </div>
 
@@ -75,7 +75,6 @@ const verificationCodeTemplate = (code) => `
 
 export default verificationCodeTemplate;
 
-
 export const getPaymentSuccessTemplate = ({ name, eventId, slots }) => {
   const slotDetails = slots
     .map(
@@ -104,7 +103,6 @@ export const getPaymentSuccessTemplate = ({ name, eventId, slots }) => {
   `;
 };
 
-
 // auto refunded template
 
 export const getConflictAfterPaymentTemplate = ({
@@ -117,7 +115,7 @@ export const getConflictAfterPaymentTemplate = ({
   selectedSlots = [],
   sessionId,
   paymentIntentId,
-  refundAmount,
+  refundAmount
 }) => {
   const slotDetails = selectedSlots
     .map(
@@ -172,7 +170,13 @@ export const getConflictAfterPaymentTemplate = ({
   `;
 };
 
-export const getPaymentSuccessForAdminTemplate = ({ name, email, phone, eventId, slots }) => {
+export const getPaymentSuccessForAdminTemplate = ({
+  name,
+  email,
+  phone,
+  eventId,
+  slots
+}) => {
   const slotDetails = slots
     .map(
       (slot, index) =>
