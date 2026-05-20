@@ -43,6 +43,12 @@ const sendVerificationOtpEmail = async ({ email, otp, subject = 'Verify your ema
   }
 };
 
+const normalizeEmail = (email) => email?.trim().toLowerCase();
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const buildEmailQuery = (email) => ({
+  email: new RegExp(`^${escapeRegExp(email)}$`, 'i'),
+});
+
 const attachVerificationOtp = (user) => {
   user.otp = generateOtp();
   user.otpExpires = getOtpExpiryDate();
@@ -71,13 +77,29 @@ const attachVerificationOtp = (user) => {
 
 
 // ✅ Modified registerUserService — send OTP after register
-export const registerUserService = async ({ name, email, password }) => {
-  const existingUser = await User.findOne({ email });
+export const registerUserService = async ({
+  name,
+  firstName,
+  lastName,
+  email,
+  password,
+}) => {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) throw new Error('Email is required');
+
+  const existingUser = await User.findOne(buildEmailQuery(normalizedEmail));
   if (existingUser) throw new Error('User already registered.');
 
+  const safeFirstName = firstName?.trim() || '';
+  const safeLastName = lastName?.trim() || '';
+  const displayName =
+    name?.trim() || [safeFirstName, safeLastName].filter(Boolean).join(' ');
+
   const newUser = new User({
-    name,
-    email,
+    name: displayName,
+    firstName: safeFirstName,
+    lastName: safeLastName,
+    email: normalizedEmail,
     password,
     otpVerified: false,
     isVerified: false,
@@ -87,12 +109,12 @@ export const registerUserService = async ({ name, email, password }) => {
   const user = await newUser.save();
 
   await sendVerificationOtpEmail({
-    email,
+    email: normalizedEmail,
     otp: user.otp,
   });
 
   return {
-    ...getVerificationMeta(email),
+    ...getVerificationMeta(normalizedEmail),
     verificationRequired: true,
   };
 };
@@ -100,10 +122,24 @@ export const registerUserService = async ({ name, email, password }) => {
 
 // ✅ New — verifyEmailService (reuses existing otp fields on the model)
 export const verifyEmailService = async ({ email, otp }) => {
-  if (!email || !otp) throw new Error('Email and otp are required');
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail || !otp) throw new Error('Email and otp are required');
 
-  const user = await User.findOne({ email });
+  const user = await User.findOne(buildEmailQuery(normalizedEmail));
   if (!user)                          throw new Error('Invalid email');
+
+  if (user.isVerified) {
+    user.otp = null;
+    user.otpExpires = null;
+    user.otpVerified = true;
+    await user.save({ validateBeforeSave: false });
+
+    return {
+      email: user.email,
+      isVerified: true,
+    };
+  }
+
   if (!user.otp || !user.otpExpires)  throw new Error('Otp not found');
 
   if (
@@ -127,9 +163,10 @@ export const verifyEmailService = async ({ email, otp }) => {
 };
 
 export const resendVerificationEmailService = async (email) => {
-  if (!email) throw new Error('Email is required');
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) throw new Error('Email is required');
 
-  const user = await User.findOne({ email });
+  const user = await User.findOne(buildEmailQuery(normalizedEmail));
   if (!user) throw new Error('Invalid email');
   if (user.isVerified) throw new Error('Email already verified');
 
@@ -145,16 +182,26 @@ export const resendVerificationEmailService = async (email) => {
 };
 
 export const loginUserService = async ({ email, password }) => {
-  if (!email || !password) throw new Error('Email and password are required');
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail || !password) throw new Error('Email and password are required');
 
-  const user = await User.findOne({ email }).select(
-    '_id name email role profileImage isVerified',
+  const user = await User.findOne(buildEmailQuery(normalizedEmail)).select(
+    '_id name firstName lastName email role profileImage isVerified otpVerified otp otpExpires',
   );
 
   if (!user) throw new Error('User not found');
 
   const isMatch = await user.comparePassword(user._id, password);
   if (!isMatch) throw new Error('Invalid password');
+
+  // Self-heal legacy accounts where OTP verification succeeded but isVerified
+  // was not persisted consistently.
+  if (!user.isVerified && user.otpVerified) {
+    user.isVerified = true;
+    user.otp = null;
+    user.otpExpires = null;
+    await user.save({ validateBeforeSave: false });
+  }
 
   if (!user.isVerified) {
     const verificationError = new Error('Email verification required');
@@ -209,9 +256,10 @@ export const refreshAccessTokenService = async (refreshToken) => {
 
 
 export const forgetPasswordService = async (email) => {
-  if (!email) throw new Error('Email is required');
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) throw new Error('Email is required');
 
-  const user = await User.findOne({ email });
+  const user = await User.findOne(buildEmailQuery(normalizedEmail));
   if (!user) throw new Error('Invalid email');
 
   attachVerificationOtp(user);
@@ -234,9 +282,10 @@ export const forgetPasswordService = async (email) => {
 
 
 export const verifyCodeService = async ({ email, otp }) => {
-  if (!email || !otp) throw new Error('Email and otp are required');
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail || !otp) throw new Error('Email and otp are required');
 
-  const user = await User.findOne({ email });
+  const user = await User.findOne(buildEmailQuery(normalizedEmail));
   if (!user) throw new Error('Invalid email');
 
   if (!user.otp || !user.otpExpires) throw new Error('Otp not found');

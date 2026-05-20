@@ -37,13 +37,21 @@ import {
 
 // ✅ Modified registerUser
 export const registerUser = async (req, res, next) => {
-  const { name, email, password } = req.body;
+  const { name, firstName, lastName, email, password } = req.body;
   try {
-    const data = await registerUserService({ name, email, password });
+    const data = await registerUserService({
+      name,
+      firstName,
+      lastName,
+      email,
+      password,
+    });
     generateResponse(res, 201, true, 'Registered successfully. Please verify your email.', data);
   } catch (error) {
-    if (error.message === 'User already registered.') {
-      generateResponse(res, 400, false, 'User already registered', null);
+    if (error.message === 'Email is required') {
+      generateResponse(res, 400, false, 'Email is required', null);
+    } else if (error.message === 'User already registered.') {
+      generateResponse(res, 400, false, 'An account with this email already exists', null);
     } else if (error.message === 'Failed to send verification email') {
       generateResponse(
         res,
