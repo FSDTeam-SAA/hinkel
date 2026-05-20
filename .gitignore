@@ -3,6 +3,6 @@
 /build
 /dist
 
-/.env
 
 /.env.example
+config.bat
