@@ -4,6 +4,50 @@ import { refreshTokenSecrete, emailExpires } from '../../core/config/config.js';
 import sendEmail from '../../lib/sendEmail.js';
 import verificationCodeTemplate from '../../lib/emailTemplates.js';
 
+const OTP_LENGTH = 6;
+const RESEND_COOLDOWN_SECONDS = 60;
+
+const generateOtp = () =>
+  String(Math.floor(10 ** (OTP_LENGTH - 1) + Math.random() * 9 * 10 ** (OTP_LENGTH - 1)));
+
+const getOtpExpiryDate = () => new Date(Date.now() + emailExpires);
+
+const maskEmail = (email) => {
+  const [localPart = '', domain = ''] = email.split('@');
+  if (!localPart || !domain) return email;
+
+  const visiblePart =
+    localPart.length <= 2
+      ? `${localPart[0] || ''}*`
+      : `${localPart.slice(0, 2)}${'*'.repeat(Math.max(1, localPart.length - 2))}`;
+
+  return `${visiblePart}@${domain}`;
+};
+
+const getVerificationMeta = (email) => ({
+  email,
+  maskedEmail: maskEmail(email),
+  expiresInMinutes: Math.ceil(emailExpires / (60 * 1000)),
+  resendCooldownSeconds: RESEND_COOLDOWN_SECONDS,
+});
+
+const sendVerificationOtpEmail = async ({ email, otp, subject = 'Verify your email' }) => {
+  const emailResult = await sendEmail({
+    to: email,
+    subject,
+    html: verificationCodeTemplate(otp),
+  });
+
+  if (!emailResult?.success) {
+    throw new Error('Failed to send verification email');
+  }
+};
+
+const attachVerificationOtp = (user) => {
+  user.otp = generateOtp();
+  user.otpExpires = getOtpExpiryDate();
+  user.otpVerified = false;
+};
 
 // export const registerUserService = async ({
 //   name,
@@ -31,32 +75,26 @@ export const registerUserService = async ({ name, email, password }) => {
   const existingUser = await User.findOne({ email });
   if (existingUser) throw new Error('User already registered.');
 
-  const otp        = Math.floor(100000 + Math.random() * 900000);
-  const otpExpires = new Date(Date.now() + emailExpires);
-
   const newUser = new User({
     name,
     email,
     password,
-    otp,
-    otpExpires,
     otpVerified: false,
     isVerified: false,
   });
 
+  attachVerificationOtp(newUser);
   const user = await newUser.save();
 
-  // ✅ Send OTP to email
-  await sendEmail({
-    to: email,
-    subject: 'Verify your email',
-    html: verificationCodeTemplate(otp),
+  await sendVerificationOtpEmail({
+    email,
+    otp: user.otp,
   });
 
-  const payload     = { _id: user._id, role: user.role };
-  const accessToken = user.generateAccessToken(payload);
-
-  return { accessToken };
+  return {
+    ...getVerificationMeta(email),
+    verificationRequired: true,
+  };
 };
 
 
@@ -82,27 +120,62 @@ export const verifyEmailService = async ({ email, otp }) => {
 
   await user.save({ validateBeforeSave: false });
 
-  return;
+  return {
+    email: user.email,
+    isVerified: user.isVerified,
+  };
+};
+
+export const resendVerificationEmailService = async (email) => {
+  if (!email) throw new Error('Email is required');
+
+  const user = await User.findOne({ email });
+  if (!user) throw new Error('Invalid email');
+  if (user.isVerified) throw new Error('Email already verified');
+
+  attachVerificationOtp(user);
+  await user.save({ validateBeforeSave: false });
+
+  await sendVerificationOtpEmail({
+    email: user.email,
+    otp: user.otp,
+  });
+
+  return getVerificationMeta(user.email);
 };
 
 export const loginUserService = async ({ email, password }) => {
   if (!email || !password) throw new Error('Email and password are required');
 
-  const user = await User.findOne({ email }).select("_id firstName lastName email role profileImage");
+  const user = await User.findOne({ email }).select(
+    '_id name email role profileImage isVerified',
+  );
 
   if (!user) throw new Error('User not found');
 
   const isMatch = await user.comparePassword(user._id, password);
   if (!isMatch) throw new Error('Invalid password');
 
+  if (!user.isVerified) {
+    const verificationError = new Error('Email verification required');
+    verificationError.statusCode = 403;
+    verificationError.data = {
+      ...getVerificationMeta(user.email),
+      verificationRequired: true,
+    };
+    throw verificationError;
+  }
+
   const payload = { _id: user._id, role: user.role };
+  const refreshToken = user.generateRefreshToken(payload);
 
   const data = {
     user,
-    accessToken: user.generateAccessToken(payload)
+    accessToken: user.generateAccessToken(payload),
+    refreshToken,
   };
 
-  user.refreshToken = user.generateRefreshToken(payload);
+  user.refreshToken = refreshToken;
   await user.save({ validateBeforeSave: false });
 
   return data
@@ -141,21 +214,20 @@ export const forgetPasswordService = async (email) => {
   const user = await User.findOne({ email });
   if (!user) throw new Error('Invalid email');
 
-  const otp = Math.floor(100000 + Math.random() * 900000);
-  const otpExpires = new Date(Date.now() + emailExpires);
-
-  user.otp = otp;
-  user.otpExpires = otpExpires;
-  user.otpVerified = false;
+  attachVerificationOtp(user);
   user.resetExpires = null;
 
   await user.save({ validateBeforeSave: false });
 
-  await sendEmail({
+  const emailResult = await sendEmail({
     to: email,
     subject: 'Password Reset OTP',
-    html: verificationCodeTemplate(otp),
+    html: verificationCodeTemplate(user.otp),
   });
+
+  if (!emailResult?.success) {
+    throw new Error('Failed to send verification email');
+  }
 
   return;
 };

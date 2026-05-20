@@ -8,16 +8,23 @@ import {
   changePassword,
   logoutUser,
   registerUser,
-  verifyEmail
+  verifyEmail,
+  resendVerificationEmail
 } from './auth.controller.js';
 import { verifyToken } from '../../core/middlewares/authMiddleware.js';
+import { emailVerificationLimiter } from '../../lib/limit.js';
 
 
 const router = express.Router();
 
 
 router.post('/register', registerUser);
-router.post('/verify-email', verifyEmail);
+router.post('/verify-email', emailVerificationLimiter, verifyEmail);
+router.post(
+  '/resend-verification-email',
+  emailVerificationLimiter,
+  resendVerificationEmail,
+);
 router.post('/login', loginUser);
 router.post('/refresh-access-token', refreshAccessToken);
 router.post('/forget-password', forgetPassword);

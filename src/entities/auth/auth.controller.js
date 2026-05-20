@@ -8,7 +8,8 @@ import {
   resetPasswordService,
   changePasswordService,
   registerUserService,
-  verifyEmailService
+  verifyEmailService,
+  resendVerificationEmailService
 } from './auth.service.js';
 
 
@@ -43,6 +44,14 @@ export const registerUser = async (req, res, next) => {
   } catch (error) {
     if (error.message === 'User already registered.') {
       generateResponse(res, 400, false, 'User already registered', null);
+    } else if (error.message === 'Failed to send verification email') {
+      generateResponse(
+        res,
+        500,
+        false,
+        'Failed to send verification email',
+        null,
+      );
     } else {
       next(error);
     }
@@ -54,8 +63,8 @@ export const registerUser = async (req, res, next) => {
 export const verifyEmail = async (req, res, next) => {
   const { email, otp } = req.body;
   try {
-    await verifyEmailService({ email, otp });
-    generateResponse(res, 200, true, 'Email verified successfully', null);
+    const data = await verifyEmailService({ email, otp });
+    generateResponse(res, 200, true, 'Email verified successfully', data);
   } catch (error) {
     if (error.message === 'Email and otp are required') {
       generateResponse(res, 400, false, 'Email and otp are required', null);
@@ -65,6 +74,39 @@ export const verifyEmail = async (req, res, next) => {
       generateResponse(res, 404, false, 'Otp not found', null);
     } else if (error.message === 'Invalid or expired otp') {
       generateResponse(res, 403, false, 'Invalid or expired otp', null);
+    } else {
+      next(error);
+    }
+  }
+};
+
+export const resendVerificationEmail = async (req, res, next) => {
+  const { email } = req.body;
+
+  try {
+    const data = await resendVerificationEmailService(email);
+    generateResponse(
+      res,
+      200,
+      true,
+      'Verification email sent successfully',
+      data,
+    );
+  } catch (error) {
+    if (error.message === 'Email is required') {
+      generateResponse(res, 400, false, 'Email is required', null);
+    } else if (error.message === 'Invalid email') {
+      generateResponse(res, 404, false, 'Invalid email', null);
+    } else if (error.message === 'Email already verified') {
+      generateResponse(res, 409, false, 'Email already verified', null);
+    } else if (error.message === 'Failed to send verification email') {
+      generateResponse(
+        res,
+        500,
+        false,
+        'Failed to send verification email',
+        null,
+      );
     } else {
       next(error);
     }
@@ -93,6 +135,16 @@ export const loginUser = async (req, res, next) => {
 
     else if (error.message === 'Invalid password') {
       generateResponse(res, 400, false, 'Invalid password', null);
+    }
+
+    else if (error.message === 'Email verification required') {
+      generateResponse(
+        res,
+        error.statusCode || 403,
+        false,
+        'Please verify your email before logging in.',
+        error.data || null,
+      );
     }
 
     else {
@@ -142,6 +194,16 @@ export const forgetPassword = async (req, res, next) => {
 
     else if (error.message === 'Invalid email') {
       generateResponse(res, 400, false, 'Invalid email', null);
+    }
+
+    else if (error.message === 'Failed to send verification email') {
+      generateResponse(
+        res,
+        500,
+        false,
+        'Failed to send verification email',
+        null,
+      );
     }
 
     else {
