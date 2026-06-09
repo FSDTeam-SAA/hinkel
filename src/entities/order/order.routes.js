@@ -17,7 +17,10 @@ import {
 } from './order.controller.js';
 import { viewBookPdf } from './order.pdfProxy.js';
 import { multerUpload } from '../../core/middlewares/multer.js';
-import { verifyToken } from '../../core/middlewares/authMiddleware.js';
+import {
+  adminMiddleware,
+  verifyToken
+} from '../../core/middlewares/authMiddleware.js';
 
 const router = express.Router();
 
@@ -25,7 +28,12 @@ const router = express.Router();
 router.post('/calculate-price', calculatePrice);
 
 // Route for updating delivery status (admin)
-router.patch('/update-delivery-status', updateDeliveryStatus);
+router.patch(
+  '/update-delivery-status',
+  verifyToken,
+  adminMiddleware,
+  updateDeliveryStatus
+);
 
 // Route for confirming payment and getting the Stripe URL
 router.post('/confirm-payment', verifyToken, confirmPayment);

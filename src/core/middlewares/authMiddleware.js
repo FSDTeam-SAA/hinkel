@@ -43,7 +43,7 @@ const userMiddleware = (req, res, next) => {
   const { role } = req.user;
 
   if (role !== "USER") {
-    generateResponse(res, 403, false, 'User access only', null);
+    return generateResponse(res, 403, false, 'User access only', null);
   }
 
   next();
@@ -57,7 +57,7 @@ const adminMiddleware = (req, res, next) => {
   const { role } = req.user;
 
   if (role !== "ADMIN") {
-    generateResponse(res, 403, false, 'Admin access only', null);
+    return generateResponse(res, 403, false, 'Admin access only', null);
   }
 
   next();
@@ -75,4 +75,3 @@ const userAdminMiddleware = (req, res, next) => {
 
 
 export { userMiddleware, adminMiddleware, userAdminMiddleware };
-
