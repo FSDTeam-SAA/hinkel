@@ -32,3 +32,14 @@ export const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 export const cloudinaryCloudName = process.env.CLOUDINARY_CLOUD_NAME;
 export const cloudinaryApiKey = process.env.CLOUDINARY_API_KEY;
 export const cloudinarySecret = process.env.CLOUDINARY_API_SECRET;
+
+// BookVault PDF production config
+export const ghostscriptBinary = process.env.GHOSTSCRIPT_BINARY || 'gs';
+export const bookvaultGrayIccProfile =
+  process.env.BOOKVAULT_GRAY_ICC_PROFILE ||
+  '/usr/share/color/icc/ghostscript/default_gray.icc';
+export const bookvaultCmykIccProfile =
+  process.env.BOOKVAULT_CMYK_ICC_PROFILE ||
+  '/usr/share/color/icc/ghostscript/default_cmyk.icc';
+export const bookvaultBackCoverLogoPath =
+  process.env.BOOKVAULT_BACK_COVER_LOGO_PATH;

@@ -8,5 +8,4 @@
 config.bat
 
 # Ignore all .env files except for .env.example
-.env
 /logs

@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import fs from 'fs';
 import Order from './order.model.js';
 import User from '../auth/auth.model.js';
 import { cloudinaryUpload } from '../../lib/cloudinaryUpload.js';
@@ -8,6 +9,7 @@ import {
   getAdjustmentQuote,
   getInitialOrderQuote
 } from './orderPricing.service.js';
+import { generateBookVaultPrintFiles } from './bookvaultPdf.service.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -34,7 +36,11 @@ const sanitizeOrderForResponse = (
   // Keep book field for cover image display (Cloudinary can render PDF thumbnails)
   // but mark it as thumbnail-only
   obj.bookThumbnail = canExposeBookAccess ? obj.book || null : null;
+  obj.hasBookvaultInteriorPdf = !!obj.bookvaultInteriorPdf;
+  obj.hasBookvaultCoverPdf = !!obj.bookvaultCoverPdf;
   delete obj.book;
+  delete obj.bookvaultInteriorPdf;
+  delete obj.bookvaultCoverPdf;
 
   return obj;
 };
@@ -515,8 +521,6 @@ export const deleteOrder = async (req, res) => {
   }
 };
 
-import fs from 'fs';
-
 /**
  * Check payment status for orders with pending status
  */
@@ -728,6 +732,125 @@ export const uploadBook = async (req, res) => {
       success: false,
       message: error.message || 'Failed to upload book'
     });
+  }
+};
+
+export const generateBookVaultFiles = async (req, res) => {
+  let generatedFiles = null;
+
+  try {
+    const { orderId } = req.params;
+    const {
+      bookTitle,
+      frontCoverImage,
+      pageImages
+    } = req.body;
+
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: 'orderId is required'
+      });
+    }
+
+    if (!frontCoverImage) {
+      return res.status(400).json({
+        success: false,
+        message: 'frontCoverImage is required'
+      });
+    }
+
+    const order = await Order.findById(orderId);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    const user = req.user;
+    const isAdmin = user?.role === 'ADMIN';
+    const isOwner = order.userId.toString() === user?._id?.toString();
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to generate files for this order'
+      });
+    }
+
+    if (order.status !== 'paid') {
+      return res.status(400).json({
+        success: false,
+        message: 'BookVault files can only be generated for paid orders'
+      });
+    }
+
+    if (!['print', 'print&digital'].includes(order.deliveryType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'BookVault files are only required for print orders'
+      });
+    }
+
+    generatedFiles = await generateBookVaultPrintFiles({
+      order,
+      bookTitle: bookTitle || order.title || 'My Coloring Book',
+      frontCoverImage,
+      pageImages
+    });
+
+    const publicPrefix = `${String(order._id)}-bookvault-${Date.now()}`;
+    const [interiorUpload, coverUpload] = await Promise.all([
+      cloudinaryUpload(
+        generatedFiles.interiorPdf,
+        `${publicPrefix}-interior`,
+        'bookvault'
+      ),
+      cloudinaryUpload(
+        generatedFiles.coverPdf,
+        `${publicPrefix}-cover`,
+        'bookvault'
+      )
+    ]);
+
+    if (!interiorUpload?.secure_url || !coverUpload?.secure_url) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to upload BookVault production files'
+      });
+    }
+
+    order.bookvaultInteriorPdf = interiorUpload.secure_url;
+    order.bookvaultCoverPdf = coverUpload.secure_url;
+    order.title = bookTitle || order.title;
+    await order.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'BookVault production files generated successfully',
+      data: {
+        orderId: order._id,
+        bookvaultInteriorPdf: order.bookvaultInteriorPdf,
+        bookvaultCoverPdf: order.bookvaultCoverPdf,
+        metadata: generatedFiles.metadata
+      }
+    });
+  } catch (error) {
+    console.error('BookVault PDF Generation Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to generate BookVault production files'
+    });
+  } finally {
+    if (generatedFiles?.jobDirectory) {
+      fs.promises
+        .rm(generatedFiles.jobDirectory, { recursive: true, force: true })
+        .catch((cleanupError) => {
+          console.error('BookVault temp cleanup failed:', cleanupError);
+        });
+    }
   }
 };
 
