@@ -13,7 +13,8 @@ import {
   checkPaymentStatus,
   deleteOrder,
   exportOrders,
-  archiveOrder
+  archiveOrder,
+  generateBookVaultFiles
 } from './order.controller.js';
 import { viewBookPdf } from './order.pdfProxy.js';
 import { multerUpload } from '../../core/middlewares/multer.js';
@@ -51,6 +52,7 @@ router.get('/user/:userId', getOrdersByUserId);
 
 // Secure PDF viewer proxy (auth required)
 router.get('/:orderId/view-pdf', verifyToken, viewBookPdf);
+router.post('/:orderId/bookvault-files', verifyToken, generateBookVaultFiles);
 
 // Admin routes
 router.get('/admin/all-orders', getAllOrdersPopulated);

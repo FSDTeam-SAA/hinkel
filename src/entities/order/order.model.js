@@ -9,6 +9,8 @@ const orderSchema = new mongoose.Schema(
     },
     title: { type: String },
     book: { type: String },
+    bookvaultInteriorPdf: { type: String },
+    bookvaultCoverPdf: { type: String },
     deliveryType: {
       type: String,
       enum: ['digital', 'print', 'print&digital'],
