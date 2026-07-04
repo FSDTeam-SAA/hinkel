@@ -3,9 +3,13 @@
 /build
 /dist
 
+#environment variables
+.env
+.env.local
+
 
 /.env.example
-config.bat
+
 
 # Ignore all .env files except for .env.example
 /logs
