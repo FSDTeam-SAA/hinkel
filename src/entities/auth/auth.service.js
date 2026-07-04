@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { refreshTokenSecrete, emailExpires } from '../../core/config/config.js';
 import sendEmail from '../../lib/sendEmail.js';
 import verificationCodeTemplate from '../../lib/emailTemplates.js';
+import { validatePasswordStrength } from './passwordRules.js';
 
 const OTP_LENGTH = 6;
 const RESEND_COOLDOWN_SECONDS = 60;
@@ -86,6 +87,7 @@ export const registerUserService = async ({
 }) => {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) throw new Error('Email is required');
+  validatePasswordStrength(password);
 
   const existingUser = await User.findOne(buildEmailQuery(normalizedEmail));
   if (existingUser) throw new Error('User already registered.');
@@ -311,6 +313,7 @@ export const verifyCodeService = async ({ email, otp }) => {
 export const resetPasswordService = async ({ email, newPassword }) => {
   if (!email || !newPassword)
     throw new Error('Email and new password are required');
+  validatePasswordStrength(newPassword);
 
   const user = await User.findOne({ email });
   if (!user) throw new Error('Invalid email');
@@ -335,6 +338,7 @@ export const resetPasswordService = async ({ email, newPassword }) => {
 
 export const changePasswordService = async ({ userId, oldPassword, newPassword }) => {
   if (!userId || !oldPassword || !newPassword) throw new Error('User id, old password and new password are required');
+  validatePasswordStrength(newPassword);
 
   const user = await User.findById(userId);
   if (!user) throw new Error('User not found');

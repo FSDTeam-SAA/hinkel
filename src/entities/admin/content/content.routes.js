@@ -5,6 +5,7 @@ import {
   deleteItem,
   getAllItems,
   getItemById,
+  getItemBySlug,
   updateItem,
   createOrUpdateHeader,
   getHeader,
@@ -16,6 +17,7 @@ const router = express.Router();
 
 // Get all distinct types - must be before /:id route
 router.get('/types/list', getDistinctTypes);
+router.get('/slug/:slug', getItemBySlug);
 
 // Upload one image per item
 router.post(

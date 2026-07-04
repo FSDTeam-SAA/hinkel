@@ -1,5 +1,6 @@
 import { generateResponse } from '../../lib/responseFormate.js';
 import * as cmsService from './cms.service.js';
+import { resolveCanonicalCategorySlug } from '../../lib/seoSlug.js';
 
 /**
  * Create new CMS content
@@ -7,7 +8,7 @@ import * as cmsService from './cms.service.js';
  */
 export const createCmsContent = async (req, res) => {
   try {
-    const { type, title, richText, plainText, isActive, order, metadata } =
+    const { type, slug, title, richText, plainText, isActive, order, metadata } =
       req.body;
 
     if (!type) {
@@ -39,6 +40,7 @@ export const createCmsContent = async (req, res) => {
     const content = await cmsService.createCmsContent(
       {
         type,
+        slug,
         title,
         richText: parsedRichText,
         plainText,
@@ -108,6 +110,23 @@ export const getCmsContentByType = async (req, res) => {
   }
 };
 
+export const getCmsContentBySlug = async (req, res) => {
+  try {
+    const slug = resolveCanonicalCategorySlug(req.params.slug);
+    const result = await cmsService.getCmsContentBySlug(slug, req.query);
+    return generateResponse(
+      res,
+      200,
+      true,
+      'CMS content fetched successfully',
+      result
+    );
+  } catch (error) {
+    console.error('Get CMS Content By Slug Error:', error);
+    return generateResponse(res, 500, false, 'Failed to fetch CMS content');
+  }
+};
+
 /**
  * Get CMS content by ID
  * GET /content/cms/:id
@@ -141,7 +160,7 @@ export const getCmsContentById = async (req, res) => {
 export const updateCmsContentById = async (req, res) => {
   try {
     const { id } = req.params;
-    const { type, title, richText, plainText, isActive, order, metadata } =
+    const { type, slug, title, richText, plainText, isActive, order, metadata } =
       req.body;
 
     // Parse richText if it's a string (from form-data)
@@ -168,6 +187,7 @@ export const updateCmsContentById = async (req, res) => {
 
     const updateData = {};
     if (type !== undefined) updateData.type = type;
+    if (slug !== undefined) updateData.slug = slug;
     if (title !== undefined) updateData.title = title;
     if (parsedRichText !== undefined) updateData.richText = parsedRichText;
     if (plainText !== undefined) updateData.plainText = plainText;

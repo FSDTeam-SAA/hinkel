@@ -4,6 +4,12 @@ import { cloudinaryUpload } from '../../../lib/cloudinaryUpload.js';
 import Item from './content.model.js';
 import Header from './header.model.js';
 import { generateResponse } from '../../../lib/responseFormate.js';
+import {
+  getCategoryLookupValues,
+  getCanonicalCategorySlug,
+  resolveCanonicalCategorySlug,
+  withResolvedSlug
+} from '../../../lib/seoSlug.js';
 // import { cloudinaryDelete } from './cloudinary.js';
 
 /**
@@ -14,9 +20,10 @@ import { generateResponse } from '../../../lib/responseFormate.js';
 
 export const createItem = async (req, res) => {
   try {
-    let { title, subtitle, type, prompt, color } = req.body;
+    let { title, subtitle, type, slug, prompt, color } = req.body;
     // Always store type in lowercase and trimmed for consistency
     if (type) type = type.trim().toLowerCase();
+    if (slug) slug = getCanonicalCategorySlug(slug, type || title);
 
     // Check if image exists
     const file = req.files?.image?.[0];
@@ -46,6 +53,7 @@ export const createItem = async (req, res) => {
       title,
       subtitle,
       type,
+      slug,
       prompt,
       color,
       image: result.url,
@@ -75,11 +83,16 @@ export const createItem = async (req, res) => {
 export const getAllItems = async (req, res) => {
   try {
     // Get type from query string
-    const { type } = req.query;
+    const { type, slug } = req.query;
 
     // Build filter object
     const filter = {};
     if (type) filter.type = type.trim().toLowerCase();
+    if (slug) {
+      const normalizedSlug = resolveCanonicalCategorySlug(slug);
+      const lookupValues = getCategoryLookupValues(normalizedSlug);
+      filter.$or = [{ slug: normalizedSlug }, { type: { $in: lookupValues } }];
+    }
 
     // Fetch items matching the filter
     const items = await Item.find(filter);
@@ -89,7 +102,7 @@ export const getAllItems = async (req, res) => {
       200,
       true,
       'Items fetched successfully',
-      items
+      items.map((item) => withResolvedSlug(item))
     );
   } catch (error) {
     console.error(error);
@@ -104,7 +117,13 @@ export const getItemById = async (req, res) => {
   try {
     const item = await Item.findById(req.params.id);
     if (!item) return generateResponse(res, 404, false, 'Item not found');
-    return generateResponse(res, 200, true, 'Item fetched successfully', item);
+    return generateResponse(
+      res,
+      200,
+      true,
+      'Item fetched successfully',
+      withResolvedSlug(item)
+    );
   } catch (error) {
     console.error(error);
     return generateResponse(res, 500, false, 'Failed to fetch item');
@@ -175,8 +194,18 @@ export const getItemById = async (req, res) => {
 
 export const updateItem = async (req, res) => {
   try {
-    let { title, subtitle, type, color, prompt, galleryAction, removeGalleryUrls } = req.body;
+    let {
+      title,
+      subtitle,
+      type,
+      slug,
+      color,
+      prompt,
+      galleryAction,
+      removeGalleryUrls
+    } = req.body;
     if (type) type = type.trim().toLowerCase();
+    if (slug) slug = getCanonicalCategorySlug(slug, type || title);
 
     // ✅ Fetch existing item first
     const existingItem = await Item.findById(req.params.id);
@@ -188,8 +217,15 @@ export const updateItem = async (req, res) => {
     if (title    !== undefined) updateData.title    = title;
     if (subtitle !== undefined) updateData.subtitle = subtitle;
     if (type     !== undefined) updateData.type     = type;
+    if (slug     !== undefined) updateData.slug     = slug;
     if (color    !== undefined) updateData.color    = color;
     if (prompt   !== undefined) updateData.prompt   = prompt;
+    if (updateData.type && updateData.type !== 'home' && !updateData.slug) {
+      updateData.slug = getCanonicalCategorySlug(
+        existingItem.slug || updateData.type,
+        updateData.type
+      );
+    }
 
     // ✅ Handle single image — comes from req.files, NOT req.body
     if (req.files?.image?.[0]) {
@@ -233,7 +269,13 @@ export const updateItem = async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    return generateResponse(res, 200, true, "Item updated successfully", updatedItem);
+    return generateResponse(
+      res,
+      200,
+      true,
+      "Item updated successfully",
+      withResolvedSlug(updatedItem)
+    );
   } catch (error) {
     console.error("[updateItem]", error);
     return generateResponse(res, 500, false, "Failed to update item");
@@ -285,6 +327,31 @@ export const deleteItem = async (req, res) => {
   } catch (error) {
     console.error("[deleteItem]", error);
     return generateResponse(res, 500, false, "Failed to delete item");
+  }
+};
+
+export const getItemBySlug = async (req, res) => {
+  try {
+    const slug = resolveCanonicalCategorySlug(req.params.slug);
+    const lookupValues = getCategoryLookupValues(slug);
+    const item = await Item.findOne({
+      $or: [{ slug }, { type: { $in: lookupValues } }]
+    });
+
+    if (!item) {
+      return generateResponse(res, 404, false, 'Item not found');
+    }
+
+    return generateResponse(
+      res,
+      200,
+      true,
+      'Item fetched successfully',
+      withResolvedSlug(item)
+    );
+  } catch (error) {
+    console.error(error);
+    return generateResponse(res, 500, false, 'Failed to fetch item');
   }
 };
 

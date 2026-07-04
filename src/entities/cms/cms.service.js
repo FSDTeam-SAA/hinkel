@@ -1,25 +1,34 @@
 import Cms from './cms.model.js';
 import { cloudinaryUpload } from '../../lib/cloudinaryUpload.js';
+import {
+  getCategoryLookupValues,
+  getCanonicalCategorySlug,
+  resolveCanonicalCategorySlug,
+  withResolvedSlug
+} from '../../lib/seoSlug.js';
 
 /**
  * Create new CMS content
  */
 export const createCmsContent = async (data, imageFile) => {
   let imageUrl = null;
+  const normalizedType = data.type?.trim().toLowerCase();
 
   // Upload image to Cloudinary if provided
   if (imageFile) {
-    const sanitizedName = `cms-${data.type}-${Date.now()}`.replace(/\s+/g, '-');
+    const sanitizedName = `cms-${normalizedType}-${Date.now()}`.replace(/\s+/g, '-');
     const result = await cloudinaryUpload(imageFile.path, sanitizedName, 'cms');
     imageUrl = result.url || null;
   }
 
   const cmsContent = await Cms.create({
     ...data,
+    type: normalizedType,
+    slug: getCanonicalCategorySlug(data.slug || normalizedType, normalizedType),
     image: imageUrl
   });
 
-  return cmsContent;
+  return withResolvedSlug(cmsContent);
 };
 
 /**
@@ -28,6 +37,7 @@ export const createCmsContent = async (data, imageFile) => {
 export const getAllCmsContent = async (query = {}) => {
   const {
     type,
+    slug,
     isActive,
     page = 1,
     limit = 10,
@@ -36,7 +46,14 @@ export const getAllCmsContent = async (query = {}) => {
   } = query;
 
   const filter = {};
-  if (type) filter.type = type;
+  if (type) filter.type = type.trim().toLowerCase();
+  if (slug) {
+    const normalizedSlug = resolveCanonicalCategorySlug(slug);
+    filter.$or = [
+      { slug: normalizedSlug },
+      { type: { $in: getCategoryLookupValues(normalizedSlug) } }
+    ];
+  }
   if (isActive !== undefined) filter.isActive = isActive === 'true';
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -48,7 +65,7 @@ export const getAllCmsContent = async (query = {}) => {
   ]);
 
   return {
-    contents,
+    contents: contents.map((content) => withResolvedSlug(content)),
     pagination: {
       total,
       page: parseInt(page),
@@ -64,7 +81,7 @@ export const getAllCmsContent = async (query = {}) => {
 export const getCmsContentByType = async (type, query = {}) => {
   const { isActive, page = 1, limit = 10 } = query;
 
-  const filter = { type };
+  const filter = { type: type.trim().toLowerCase() };
   if (isActive !== undefined) filter.isActive = isActive === 'true';
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -78,7 +95,40 @@ export const getCmsContentByType = async (type, query = {}) => {
   ]);
 
   return {
-    contents,
+    contents: contents.map((content) => withResolvedSlug(content)),
+    pagination: {
+      total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      totalPages: Math.ceil(total / parseInt(limit))
+    }
+  };
+};
+
+export const getCmsContentBySlug = async (slug, query = {}) => {
+  const { isActive, page = 1, limit = 10 } = query;
+  const normalizedSlug = resolveCanonicalCategorySlug(slug);
+  const filter = {
+    $or: [
+      { slug: normalizedSlug },
+      { type: { $in: getCategoryLookupValues(normalizedSlug) } }
+    ]
+  };
+
+  if (isActive !== undefined) filter.isActive = isActive === 'true';
+
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+
+  const [contents, total] = await Promise.all([
+    Cms.find(filter)
+      .sort({ order: 1, createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit)),
+    Cms.countDocuments(filter)
+  ]);
+
+  return {
+    contents: contents.map((content) => withResolvedSlug(content)),
     pagination: {
       total,
       page: parseInt(page),
@@ -93,7 +143,7 @@ export const getCmsContentByType = async (type, query = {}) => {
  */
 export const getCmsContentById = async (id) => {
   const content = await Cms.findById(id);
-  return content;
+  return withResolvedSlug(content);
 };
 
 /**
@@ -102,13 +152,14 @@ export const getCmsContentById = async (id) => {
 export const updateCmsContentById = async (id, data, imageFile) => {
   const existingContent = await Cms.findById(id);
   if (!existingContent) return null;
+  const normalizedType = data.type?.trim().toLowerCase() || existingContent.type;
 
   let imageUrl = existingContent.image;
 
   // Upload new image if provided
   if (imageFile) {
     const sanitizedName =
-      `cms-${data.type || existingContent.type}-${Date.now()}`.replace(
+      `cms-${normalizedType}-${Date.now()}`.replace(
         /\s+/g,
         '-'
       );
@@ -120,12 +171,17 @@ export const updateCmsContentById = async (id, data, imageFile) => {
     id,
     {
       ...data,
+      type: normalizedType,
+      slug: getCanonicalCategorySlug(
+        data.slug || existingContent.slug || normalizedType,
+        normalizedType
+      ),
       image: imageUrl
     },
     { new: true, runValidators: true }
   );
 
-  return updatedContent;
+  return withResolvedSlug(updatedContent);
 };
 
 /**
@@ -133,7 +189,7 @@ export const updateCmsContentById = async (id, data, imageFile) => {
  */
 export const deleteCmsContentById = async (id) => {
   const deletedContent = await Cms.findByIdAndDelete(id);
-  return deletedContent;
+  return withResolvedSlug(deletedContent);
 };
 
 /**

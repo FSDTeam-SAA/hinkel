@@ -3,6 +3,7 @@ import { multerUpload } from '../../core/middlewares/multer.js';
 import {
   createCmsContent,
   getAllCmsContent,
+  getCmsContentBySlug,
   getCmsContentByType,
   getCmsContentById,
   updateCmsContentById,
@@ -21,6 +22,7 @@ router.patch('/order/bulk', updateCmsOrder);
 
 // Get content by type - must be before /:id route
 router.get('/type/:type', getCmsContentByType);
+router.get('/slug/:slug', getCmsContentBySlug);
 
 // Create new CMS content
 router.post(

@@ -50,6 +50,8 @@ export const registerUser = async (req, res, next) => {
   } catch (error) {
     if (error.message === 'Email is required') {
       generateResponse(res, 400, false, 'Email is required', null);
+    } else if (error.message === 'Password must be at least 8 characters and include 1 uppercase letter and 1 special character') {
+      generateResponse(res, 400, false, error.message, null);
     } else if (error.message === 'User already registered.') {
       generateResponse(res, 400, false, 'An account with this email already exists', null);
     } else if (error.message === 'Failed to send verification email') {
@@ -264,6 +266,10 @@ export const resetPassword = async (req, res, next) => {
       generateResponse(res, 400, false, 'Email and new password are required', null);
     }
 
+    else if (error.message === 'Password must be at least 8 characters and include 1 uppercase letter and 1 special character') {
+      generateResponse(res, 400, false, error.message, null);
+    }
+
     else if (error.message === 'Invalid email') {
       generateResponse(res, 400, false, 'Invalid email', null);
     }
@@ -288,11 +294,15 @@ export const changePassword = async (req, res, next) => {
   }
 
   catch (error) {
-    if (error.message === 'Old and new passwords are required') {
+    if (error.message === 'User id, old password and new password are required') {
       generateResponse(res, 400, false, 'Old and new passwords are required', null);
     }
 
-    else if (error.message === 'Password does not match') {
+    else if (error.message === 'Password must be at least 8 characters and include 1 uppercase letter and 1 special character') {
+      generateResponse(res, 400, false, error.message, null);
+    }
+
+    else if (error.message === 'Invalid old password') {
       generateResponse(res, 400, false, 'Password does not match', null);
     }
 
