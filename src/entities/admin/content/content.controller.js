@@ -1,4 +1,4 @@
-import { cloudinaryUpload } from '../../../lib/cloudinaryUpload.js';
+import cloudinary, { cloudinaryUpload } from '../../../lib/cloudinaryUpload.js';
 // Your helper for consistent responses
 // import fs from 'fs';
 import Item from './content.model.js';
@@ -11,6 +11,30 @@ import {
   withResolvedSlug
 } from '../../../lib/seoSlug.js';
 // import { cloudinaryDelete } from './cloudinary.js';
+
+const getCloudinaryPublicIdFromUrl = (url) => {
+  if (!url) {
+    return null;
+  }
+
+  try {
+    const pathname = new URL(url).pathname;
+    const uploadMarker = '/upload/';
+    const uploadIndex = pathname.indexOf(uploadMarker);
+    if (uploadIndex === -1) {
+      return null;
+    }
+
+    const publicPath = pathname
+      .slice(uploadIndex + uploadMarker.length)
+      .replace(/^v\d+\//, '')
+      .replace(/\.[^/.]+$/, '');
+
+    return publicPath || null;
+  } catch {
+    return null;
+  }
+};
 
 /**
  * Create Item
@@ -316,11 +340,29 @@ export const deleteItem = async (req, res) => {
     if (deletedItem.image)                     imagesToDelete.push(deletedItem.image);
     if (deletedItem.gallery?.length > 0)       imagesToDelete.push(...deletedItem.gallery);
 
-    // ✅ Delete all images from Cloudinary in parallel
+    // ✅ Delete all images from Cloudinary in parallel, but do not fail the API
+    // after the database record is already gone.
     if (imagesToDelete.length > 0) {
-      await Promise.all(
-        imagesToDelete.map((url) => cloudinaryDelete(url))
+      const deleteResults = await Promise.allSettled(
+        imagesToDelete.map(async (url) => {
+          const publicId = getCloudinaryPublicIdFromUrl(url);
+          if (!publicId) {
+            return null;
+          }
+
+          return cloudinary.uploader.destroy(publicId);
+        })
       );
+
+      const failedDeletes = deleteResults.filter(
+        (result) => result.status === 'rejected'
+      );
+
+      if (failedDeletes.length > 0) {
+        console.warn(
+          `[deleteItem] Category ${req.params.id} deleted, but ${failedDeletes.length} Cloudinary asset(s) could not be removed`
+        );
+      }
     }
 
     return generateResponse(res, 200, true, "Item deleted successfully");
