@@ -311,11 +311,13 @@ export const verifyCodeService = async ({ email, otp }) => {
 
 
 export const resetPasswordService = async ({ email, newPassword }) => {
-  if (!email || !newPassword)
+  const normalizedEmail = normalizeEmail(email);
+
+  if (!normalizedEmail || !newPassword)
     throw new Error('Email and new password are required');
   validatePasswordStrength(newPassword);
 
-  const user = await User.findOne({ email });
+  const user = await User.findOne(buildEmailQuery(normalizedEmail));
   if (!user) throw new Error('Invalid email');
 
   if (!user.otpVerified || !user.resetExpires) {

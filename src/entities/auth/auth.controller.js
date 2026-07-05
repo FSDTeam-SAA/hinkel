@@ -278,6 +278,10 @@ export const resetPassword = async (req, res, next) => {
       generateResponse(res, 403, false, 'otp not cleared', null);
     }
 
+    else if (error.message === 'Reset session expired') {
+      generateResponse(res, 403, false, 'Reset session expired', null);
+    }
+
     else {
       next(error)
     }
